@@ -37,6 +37,9 @@ THE SOFTWARE.
 
 #include "OgreGLRenderSystemCommon.h"
 #include "OgreGLStateCacheManager.h"
+#include "OgreCamera.h"
+#include "OgreSceneManager.h"
+#include "OgreRenderTargetListener.h"
 
 namespace Ogre {
     /** \addtogroup RenderSystems RenderSystems
@@ -399,6 +402,11 @@ namespace Ogre {
 
         /// @copydoc RenderSystem::markProfileEvent
         virtual void markProfileEvent( const String &eventName );
+
+        /** See Camera::cameraPreRenderScene
+        @note This callback is only usefull if you have activated the quad buffer rendering option.		
+        */		
+        virtual void cameraPreRenderScene(Camera* cam);		
 
         /** @copydoc RenderTarget::copyContentsToMemory */
         void _copyContentsToMemory(Viewport* vp, const Box& src, const PixelBox &dst, RenderWindow::FrameBuffer buffer);

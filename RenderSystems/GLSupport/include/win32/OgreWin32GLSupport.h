@@ -70,7 +70,7 @@ namespace Ogre
 
         virtual unsigned int getDisplayMonitorCount() const;
 		
-		/** @see GLSupport::supportsQuadBuffer
+		    /** @see GLSupport::supportsQuadBuffer
         */
         virtual bool supportsQuadBuffer();
     private:

@@ -104,6 +104,11 @@ namespace Ogre
             const VideoModes& getVideoModes() const { return mVideoModes; }
 
             ContextProfile getContextProfile() const { return mContextProfile; }
+
+            /** @see GLSupport::supportsQuadBuffer
+            */
+            virtual bool supportsQuadBuffer() { return false; }
+
         protected:
             typedef GLRenderSystemCommon::VideoMode VideoMode;
 
