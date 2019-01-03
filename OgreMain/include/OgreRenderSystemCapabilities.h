@@ -215,6 +215,8 @@ namespace Ogre
         RSC_DEBUG = OGRE_CAPS_VALUE(CAPS_CATEGORY_GL, 4),
         /// RS can map driver buffer storage directly instead of using a shadow buffer
         RSC_MAPBUFFER = OGRE_CAPS_VALUE(CAPS_CATEGORY_GL, 5),
+		/// Support for OpenGL Quad buffer
+        RSC_QUAD_BUFFER = OGRE_CAPS_VALUE(CAPS_CATEGORY_GL, 6)
     };
 
     /// DriverVersion is used by RenderSystemCapabilities and both GL and D3D9

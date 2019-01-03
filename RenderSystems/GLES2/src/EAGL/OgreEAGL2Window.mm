@@ -187,7 +187,15 @@ namespace Ogre {
         // Set us up with an external window, or create our own.
         if(!mIsExternal)
         {
-            mWindow = [[UIWindow alloc] initWithFrame:CGRectMake(0, 0, widthPt, heightPt)];
+            // If using an external view, get the view's parent UIWindow, if it exists
+            if (mUsingExternalView)
+              mWindow = [mView window];
+          
+            // Create a window if no view nor window are provided, or if the provided view has no window.
+            if (mWindow == nil)
+              mWindow = [[UIWindow alloc] initWithFrame:CGRectMake(0, 0, widthPt, heightPt)];
+            else
+              mIsExternal = true;
         }
         
         OgreAssert(mWindow || mUsingExternalViewController, "EAGL2Window: Failed to obtain required native window");
@@ -201,12 +209,13 @@ namespace Ogre {
             // Use the default scale factor of the screen
             // See Apple's documentation on supporting high resolution devices for more info
             mView.contentScaleFactor = mContentScalingFactor;
+            [mView setMWindowName:mName];
         }
     
-        OgreAssert(mView != nil, "EAGL2Window: Failed to create view");
+        //OgreAssert(mView != nil, "EAGL2Window: Failed to create view");
         
-        [mView setMWindowName:mName];
-
+        //[mView setMWindowName:mName];
+        
         OgreAssert([mView.layer isKindOfClass:[CAEAGLLayer class]], "EAGL2Window: View's Core Animation layer is not a CAEAGLLayer. This is a requirement for using OpenGL ES for drawing.");
         
         CAEAGLLayer *eaglLayer = (CAEAGLLayer *)mView.layer;
@@ -226,12 +235,19 @@ namespace Ogre {
         // Set up the view controller
         if(!mUsingExternalViewController)
         {
+            // Create a view controller only if our window doesn't already have one
+            if (mWindow.rootViewController == nil)
             mViewController = [[EAGL2ViewController alloc] init];
+            else
+            {
+              mUsingExternalViewController = true;
+              mViewController = (__bridge EAGL2ViewController *)(void*)mWindow.rootViewController;
+        	}
         }
         
         OgreAssert(mViewController != nil, "EAGL2Window: Failed to create view controller");
         
-        if(mViewController.view != mView)
+        if(!mUsingExternalView && (mViewController.view != mView))
             mViewController.view = mView;
 
         if(eaglLayer)
@@ -258,11 +274,13 @@ namespace Ogre {
         
         OgreAssert(mContext != nil, "EAGL2Window: Failed to create OpenGL ES context");
 
-        mViewController.mGLSupport = mGLSupport;
+        //mViewController.mGLSupport = mGLSupport;
         
         if(!mUsingExternalViewController)
         {
             [mWindow addSubview:mViewController.view];
+            // GLsupport is only for EAGL2ViewController
+            mViewController.mGLSupport = mGLSupport;
             mWindow.rootViewController = mViewController;
             [mWindow makeKeyAndVisible];
         }

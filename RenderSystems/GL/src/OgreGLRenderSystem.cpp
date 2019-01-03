@@ -162,7 +162,11 @@ namespace Ogre {
         mStateCacheManager(0),
         mRTTManager(0),
         mActiveTextureUnit(0),
-        mMaxBuiltInTextureAttribIndex(0)
+        mMaxBuiltInTextureAttribIndex(0),
+        mQuadBufferEnabled(false),
+        mIsCurrentBufferRight(true),
+        mIsQuadBufferInitialized(false),
+        mIsQuadBufferShadowsRendering(false)
     {
         size_t i;
 
@@ -604,7 +608,12 @@ namespace Ogre {
         glGetFloatv(GL_ALIASED_LINE_WIDTH_RANGE, lineWidth);
         if(lineWidth[1] != 1 && lineWidth[1] != lineWidth[0])
             rsc->setCapability(RSC_WIDE_LINES);
-
+        
+        // Quad buffer support
+        if(mGLSupport->supportsQuadBuffer())
+        {
+            rsc->setCapability(RSC_QUAD_BUFFER);
+        }
         return rsc;
     }
 
@@ -843,6 +852,17 @@ namespace Ogre {
             caps->setNumMultiRenderTargets(1);
         }
 
+        /// Check option for quad buffer stereo
+        if(caps->hasCapability(RSC_QUAD_BUFFER))
+        {
+            cfi = getConfigOptions().find("Stereo Mode");
+            int rttMode = 0;
+            if (cfi != getConfigOptions().end())
+            {
+                if (cfi->second.currentValue == "QuadBuffer")
+                    mQuadBufferEnabled = true;
+            }
+        }
 
         Log* defaultLog = LogManager::getSingleton().getDefaultLog();
         if (defaultLog)
@@ -1920,6 +1940,42 @@ namespace Ogre {
             OGRE_EXCEPT(Exception::ERR_INVALID_STATE,
                         "Cannot begin frame - no viewport selected.",
                         "GLRenderSystem::_beginFrame");
+
+        // Register some listeners for quad buffer support
+        if(mQuadBufferEnabled)
+        {
+            // Check if the camera is already registered for quad buffer listener logic.
+            CameraList::iterator i = mRegisteredQuadBufferCameras.find(mActiveViewport->getCamera());
+            if(i == mRegisteredQuadBufferCameras.end())
+            {
+                // Add a listener on the current camera to catch the cameraPostRenderScene event
+                mActiveViewport->getCamera()->addListener(this);
+                mRegisteredQuadBufferCameras.insert(mActiveViewport->getCamera());
+
+                // Check if the scene manager is already registered for quad buffer listener logic.
+                SceneManagerList::iterator j = mRegisteredQuadBufferSceneManagers.find(mActiveViewport->getCamera()->getSceneManager());
+                if(j == mRegisteredQuadBufferSceneManagers.end())
+                {
+                    mActiveViewport->getCamera()->getSceneManager()->addListener(this);
+                    mRegisteredQuadBufferSceneManagers.insert(mActiveViewport->getCamera()->getSceneManager());
+                }
+            }
+
+            // Check if the camera is already registered for quad buffer listener logic.
+            if ((mActiveViewport->getTarget()->getName().find("rtt/") == String::npos) && (mActiveViewport->getTarget()->getName().find("mrt/") == String::npos))
+            {
+                ViewportList::iterator iv = mRegisteredQuadBufferViewport.find(mActiveViewport->getTarget());
+                if (iv == mRegisteredQuadBufferViewport.end())
+                {
+                    // Add a listener on the current camera to catch the cameraPostRenderScene event
+                    mActiveViewport->getTarget()->insertListener(this);
+                    mRegisteredQuadBufferViewport.insert(mActiveViewport->getTarget());
+
+                    // This flag is there to tell that it's the first time we render with this camera using quad buffer
+                    mIsQuadBufferInitialized = true;
+                }
+            }        
+        }
 
         // Activate the viewport clipping
         mScissorsEnabled = true;
@@ -3466,6 +3522,121 @@ namespace Ogre {
     }
 	
 	//---------------------------------------------------------------------
+	void GLRenderSystem::preRenderTargetUpdate(const RenderTargetEvent& evt)
+    {
+        if(mIsQuadBufferInitialized)
+        {
+            // Ignore quad buffer stuff if we are currently in a texture shadow rtt rendering.
+            Camera* cam = mActiveViewport->getCamera();
+
+            if (cam)
+            {
+                // Get the frustrum stereo data
+                Vector2 eyeOffset = Vector2::ZERO - cam->getFrustumOffset();
+
+                // Inverse the frustrum offset on the camera (inverse of camera offset position)
+                cam->setFrustumOffset(eyeOffset);
+
+                // Move the camera from the mid-eyes position to the left/right eye position.
+                // We want the stereo pairs to be parallel, so add to the position of the camera the inverse of the frustrum offset.
+                cam->moveRelative(Vector3(-eyeOffset.x, -eyeOffset.y, 0.0f));
+            }
+        }
+    }
+
+	void GLRenderSystem::postRenderTargetUpdate(const RenderTargetEvent& evt)
+    {
+        if(mIsQuadBufferInitialized)
+        {
+            // Change target buffer
+            mIsCurrentBufferRight = !mIsCurrentBufferRight;
+
+            // Get the frustrum stereo data
+            Camera* cam = mActiveViewport->getCamera();
+
+            if (cam)
+            {
+                Vector2 eyeOffset = cam->getFrustumOffset();
+
+                // Move the camera back to the mid-eyes position.
+                cam->moveRelative(Vector3(eyeOffset.x, eyeOffset.y, 0.0f));
+            }
+
+            // We just changed the target, but don't worry, this test is really what we want to do :)
+            if(!mIsCurrentBufferRight)
+            {
+                // Ask for a second rendering, will effectively be drawed in left back buffer
+                evt.source->update(false);
+            }
+        }
+    }
+
+	void GLRenderSystem::viewportRemoved(const RenderTargetViewportEvent& evt)
+    {
+        // Reset stereo params
+        mIsCurrentBufferRight = true;
+
+        // Do not use this camera anymore for quad buffer rendering.
+        ViewportList::iterator i = mRegisteredQuadBufferViewport.find(evt.source->getTarget());
+        if (i != mRegisteredQuadBufferViewport.end())
+            mRegisteredQuadBufferViewport.erase(evt.source->getTarget());
+
+        // Remove the listener on the current camera (no more need to catch camera events)
+        evt.source->getTarget()->removeListener(this);
+    }
+
+    void GLRenderSystem::cameraPreRenderScene(Camera* cam)
+    {
+        if(mIsQuadBufferInitialized)
+        {
+            // Select active buffer
+            if(mIsCurrentBufferRight || (mActiveViewport->getTarget()->getName().find("rtt/") != String::npos) || (mActiveViewport->getTarget()->getName().find("mrt/") != String::npos))
+            {
+                // Draw in the right back buffer
+                glDrawBuffer(GL_BACK_RIGHT);
+            }
+            else
+            {
+                // Draw in the left back buffer
+                glDrawBuffer(GL_BACK_LEFT);
+            }
+        }
+    }
+
+    void GLRenderSystem::cameraDestroyed(Camera* cam)
+    {
+        // Reset stereo params
+        mIsCurrentBufferRight = true;
+
+        // Do not use this camera anymore for quad buffer rendering.
+        CameraList::iterator i = mRegisteredQuadBufferCameras.find(cam);
+        if(i != mRegisteredQuadBufferCameras.end())
+            mRegisteredQuadBufferCameras.erase(cam);
+
+        // Remove the listener on the current camera (no more need to catch camera events)
+        cam->removeListener(this);
+    }
+
+    void GLRenderSystem::shadowTextureCasterPreViewProj(Light* light, Camera* camera, size_t iteration)
+    {
+        mIsQuadBufferShadowsRendering = true;
+    }
+
+    void GLRenderSystem::shadowTexturesUpdated(size_t numberOfShadowTextures)
+    {
+        mIsQuadBufferShadowsRendering = false;
+    }
+
+    void GLRenderSystem::sceneManagerDestroyed(SceneManager* source)
+    {
+        // Do not use this scene manager anymore for quad buffer rendering.
+        SceneManagerList::iterator i = mRegisteredQuadBufferSceneManagers.find(source);
+        if(i != mRegisteredQuadBufferSceneManagers.end())
+            mRegisteredQuadBufferSceneManagers.erase(source);
+
+        // Remove the listener on the current scene
+        source->removeListener(this);
+    }
 #if OGRE_NO_QUAD_BUFFER_STEREO == 0
 	bool GLRenderSystem::setDrawBuffer(ColourBufferType colourBuffer)
 	{

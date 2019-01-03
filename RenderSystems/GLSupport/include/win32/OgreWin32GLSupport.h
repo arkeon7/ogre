@@ -69,11 +69,16 @@ namespace Ogre
         bool selectPixelFormat(HDC hdc, int colourDepth, int multisample, bool hwGamma);
 
         virtual unsigned int getDisplayMonitorCount() const;
+		
+		/** @see GLSupport::supportsQuadBuffer
+        */
+        virtual bool supportsQuadBuffer();
     private:
         Win32Window *mInitialWindow;
         bool mHasPixelFormatARB;
         bool mHasMultisample;
         bool mHasHardwareGamma;
+        bool mHasQuadBuffer;
         PFNWGLCHOOSEPIXELFORMATARBPROC mWglChoosePixelFormat;
 
         struct DisplayMonitorInfo

@@ -50,6 +50,7 @@ namespace Ogre {
         , mHasPixelFormatARB(false)
         , mHasMultisample(false)
         , mHasHardwareGamma(false)
+        , mHasQuadBuffer(false)
         , mWglChoosePixelFormat(0)
     {
         // immediately test WGL_ARB_pixel_format and FSAA support
@@ -97,6 +98,23 @@ namespace Ogre {
         optVSyncInterval.possibleValues.push_back( "4" );
         optVSyncInterval.currentValue = "1";
 
+        //------ Begin Stereo Patch
+		ConfigOption optStereoMode;
+		optStereoMode.name = "Stereo Mode";
+        optStereoMode.possibleValues.push_back("Mono");
+        if (mHasQuadBuffer)
+        {
+            optStereoMode.possibleValues.push_back("QuadBuffer");
+            optStereoMode.currentValue = "QuadBuffer";
+		    optStereoMode.immutable = false;
+        }
+        else
+        {
+            optStereoMode.currentValue = "Mono";
+            optStereoMode.immutable = true;
+        }
+		mOptions[optStereoMode.name] = optStereoMode;
+        //------ End Stereo Patch
         mOptions[optColourDepth.name] = optColourDepth;
         mOptions[optVSyncInterval.name] = optVSyncInterval;
 
@@ -373,6 +391,22 @@ namespace Ogre {
                 }
             }
             
+            //------ Begin Stereo Patch         
+            // check for left & right (stereo) color buffer support
+            if (mHasPixelFormatARB)			
+            {			
+              PFNWGLGETPIXELFORMATATTRIBIVARBPROC _wglGetPixelFormatAttribivARB = (PFNWGLGETPIXELFORMATATTRIBIVARBPROC) wglGetProcAddress("wglGetPixelFormatAttribivARB");			
+              int query = WGL_STEREO_ARB, stereo;			
+              if (_wglGetPixelFormatAttribivARB(hdc, format, 0, 1, &query, &stereo))			
+              {			
+                  if (stereo != 0)			
+                  {			
+                      mHasQuadBuffer = true;			
+                  }			
+              }			
+            }
+            //------ End Stereo Patch
+            
             wglMakeCurrent(oldhdc, oldrc);
             wglDeleteContext(hrc);
         }
@@ -400,11 +434,10 @@ namespace Ogre {
         pfd.cDepthBits = 24;
         pfd.cStencilBits = 8;
 
-#if OGRE_NO_QUAD_BUFFER_STEREO == 0
-		if (SMT_FRAME_SEQUENTIAL == mStereoMode)
+        //------ Begin Stereo Patch
+        if (mHasQuadBuffer)
 			pfd.dwFlags |= PFD_STEREO;
-#endif
-
+        //------ End Stereo Patch
         int format = 0;
 
         int useHwGamma = hwGamma;
@@ -489,4 +522,9 @@ namespace Ogre {
         return String(errDesc);
     }
 
+    bool Win32GLSupport::supportsQuadBuffer()
+    {
+        return mHasQuadBuffer;	
+    }
+    
 }

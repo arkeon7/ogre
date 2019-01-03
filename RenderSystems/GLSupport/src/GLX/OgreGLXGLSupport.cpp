@@ -146,6 +146,15 @@ namespace Ogre
             }
         }
 
+        //------ Begin quadbuffer patch
+        int stereoAttrib[] = { GLX_STEREO, True, None };
+        fbConfigs = chooseFBConfig( stereoAttrib, &nConfigs );
+        if( fbConfigs )
+        {
+           mHasQuadBuffer = true;
+        }
+        //------ End quadbuffer patch
+
         XFree (fbConfigs);
     }
 
@@ -605,6 +614,49 @@ namespace Ogre
     GLXFBConfig* GLXGLSupport::chooseFBConfig(const GLint *attribList, GLint *nElements)
     {
         GLXFBConfig *fbConfigs;
+
+		//------ Begin Stereo Patch
+        ConfigOptionMap::iterator opt;
+
+        if( attribList && (opt = mOptions.find("Stereo Mode")) != mOptions.end() )
+        {
+           LogManager::getSingleton().logMessage( "Stereo Mode is " +  opt->second.currentValue );
+
+           if (opt->second.currentValue == "QuadBuffer")
+           {
+              //Add GLX_STEREO
+              int attribListSize = 0;
+
+              //First iterate to get the number of attributes (omitting the final "None" parameter)
+              while( attribList[attribListSize] != None )
+                 ++attribListSize;
+
+              //Now create a copy of the attrib list and add two values to it to activate stereo
+              GLint* newAttribList = new GLint[ attribListSize + 2];
+              for( int i = 0; i < attribListSize; ++i )
+              {
+                 newAttribList[i] = attribList[i];
+              }
+
+              newAttribList[attribListSize] = GLX_STEREO;
+              newAttribList[attribListSize + 1] = True;
+              newAttribList[attribListSize + 2] = None;
+
+              //if (GLXEW_VERSION_1_3)
+              //   fbConfigs = glXChooseFBConfig(mGLDisplay, DefaultScreen(mGLDisplay), newAttribList, nElements);
+              //else
+              fbConfigs = glXChooseFBConfigSGIX(mGLDisplay, DefaultScreen(mGLDisplay), newAttribList, nElements);
+
+              delete newAttribList;
+
+              if( !fbConfigs )
+              {
+                 OGRE_EXCEPT(Exception::ERR_RENDERINGAPI_ERROR, "Stereo not supported with currently selected options.", "GLXGLSupport::chooseFBConfig");
+              }
+              return fbConfigs;
+           }
+        }
+        //------ End Stereo Patch
 
         fbConfigs = glXChooseFBConfig(mGLDisplay, DefaultScreen(mGLDisplay), attribList, nElements);
 

@@ -54,11 +54,38 @@ namespace Ogre {
     /**
       Implementation of GL as a rendering system.
      */
-    class _OgreGLExport GLRenderSystem : public GLRenderSystemCommon
+    class _OgreGLExport GLRenderSystem : public GLRenderSystemCommon,
+                                         public Camera::Listener,
+                                         public RenderTargetListener,
+                                         public SceneManager::Listener
     {
     private:
         /// Rendering loop control
         bool mStopRendering;
+
+        /// Render frames using quad buffer instead of standard double buffer.
+        bool mQuadBufferEnabled;
+
+        /// Should we draw on left or right back buffer when quad buffer is activated?
+        bool mIsCurrentBufferRight;
+
+        /// As we activate the quad buffer on a camera after it's pre-render event,
+        /// we need a flag to indicate that we will ignore the first frame rendering.
+        bool mIsQuadBufferInitialized;
+
+        /// Flag to know when we are rendering textures shadows with quad buffer enabled.
+        bool mIsQuadBufferShadowsRendering;
+
+        /// Store a list of cameras, usefull for quad buffer camera listeners add/deletion.
+        typedef std::set<Camera*> CameraList;
+        CameraList mRegisteredQuadBufferCameras;
+
+        typedef std::set<RenderTarget*> ViewportList;
+        ViewportList mRegisteredQuadBufferViewport;
+
+        /// Store a list of scene manager, usefull for quad buffer scene manager listeners add/deletion.
+        typedef std::set<SceneManager*> SceneManagerList;
+        SceneManagerList mRegisteredQuadBufferSceneManagers;
 
         /** Array of up to 8 lights, indexed as per API
             Note that a null value indicates a free slot
@@ -375,6 +402,42 @@ namespace Ogre {
 
         /** @copydoc RenderTarget::copyContentsToMemory */
         void _copyContentsToMemory(Viewport* vp, const Box& src, const PixelBox &dst, RenderWindow::FrameBuffer buffer);
+        
+        /** See RenderTargetListener::preViewportUpdate
+        @note This callback is only usefull if you have activated the quad buffer rendering option.		
+        */		
+        virtual void preRenderTargetUpdate(const RenderTargetEvent& evt);	
+
+        /** See RenderTargetListener::preViewportUpdate		
+        @note This callback is only usefull if you have activated the quad buffer rendering option.		
+        */		
+        virtual void postRenderTargetUpdate(const RenderTargetEvent& evt);	
+
+        /** See RenderTargetListener::viewportRemoved		
+        @note This callback is only usefull if you have activated the quad buffer rendering option.		
+        */		
+        virtual void viewportRemoved(const RenderTargetViewportEvent& evt);
+
+        /** See Camera::cameraDestroyed
+        @note This callback is only usefull if you have activated the quad buffer rendering option.
+        */
+        virtual void cameraDestroyed(Camera* cam);
+
+        /** See SceneManager::shadowTextureCasterPreViewProj
+        @note This callback is only usefull if you have activated the quad buffer rendering option, and we render a shadow texture
+        */
+        virtual void shadowTextureCasterPreViewProj(Light* light, Camera* camera, size_t iteration);
+
+        /** See SceneManager::shadowTextureReceiverPreViewProj
+        @note This callback is only usefull if you have activated the quad buffer rendering option, and we render a shadow texture
+        */
+        virtual void shadowTexturesUpdated(size_t numberOfShadowTextures);
+
+        /** See SceneManager::sceneManagerDestroyed
+        @note This callback is only usefull if you have activated the quad buffer rendering option, and we render a shadow texture
+        */
+        virtual void sceneManagerDestroyed(SceneManager* source);
+
     };
     /** @} */
     /** @} */

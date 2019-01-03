@@ -310,6 +310,9 @@ namespace Ogre {
             pLog->logMessage(
                 " * Map buffer storage: "
                 + StringConverter::toString(hasCapability(RSC_MAPBUFFER), true));
+            pLog->logMessage(
+                 " * Quad Buffer: "                                                 
+                 + StringConverter::toString(hasCapability(RSC_QUAD_BUFFER), true));
         }
 
         if (mCategoryRelevant[CAPS_CATEGORY_D3D9])

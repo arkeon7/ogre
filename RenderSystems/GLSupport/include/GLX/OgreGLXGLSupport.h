@@ -189,6 +189,7 @@ namespace Ogre {
         Display* mGLDisplay; // used for GL/GLX commands
         Display* mXDisplay;  // used for other X commands and events
         bool mIsExternalDisplay;
+        bool mHasQuadBuffer;
 
         struct GLXVideoMode
         {

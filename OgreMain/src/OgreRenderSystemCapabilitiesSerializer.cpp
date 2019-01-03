@@ -416,6 +416,7 @@ namespace Ogre
         addCapabilitiesMapping("debug", RSC_DEBUG);
         addCapabilitiesMapping("mapbuffer", RSC_MAPBUFFER);
         addCapabilitiesMapping("automipmap_compressed", RSC_AUTOMIPMAP_COMPRESSED);
+        addCapabilitiesMapping("quad_buffer", RSC_QUAD_BUFFER);
     }
 
     void RenderSystemCapabilitiesSerializer::parseCapabilitiesLines(CapabilitiesLinesList& lines)
