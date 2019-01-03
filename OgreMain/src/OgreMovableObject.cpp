@@ -38,7 +38,35 @@ namespace Ogre {
     uint32 MovableObject::msDefaultQueryFlags = 0xFFFFFFFF;
     uint32 MovableObject::msDefaultVisibilityFlags = 0xFFFFFFFF;
     //-----------------------------------------------------------------------
-    MovableObject::MovableObject() : MovableObject(BLANKSTRING) {}
+    //-----------------------------------------------------------------------
+    //MovableObject::MovableObject() : MovableObject(BLANKSTRING) {}
+    MovableObject::MovableObject()
+        : mName("")
+        , mCreator(0)
+        , mManager(0)
+        , mParentNode(0)
+        , mListener(0)
+        , mParentIsTagPoint(false)
+        , mVisible(true)
+        , mDebugDisplay(false)
+        , mBeyondFarDistance(false)
+        , mCastShadows(true)
+        , mRenderQueueIDSet(false)
+        , mRenderQueuePrioritySet(false)
+        , mRenderingDisabled(false)
+        , mRenderQueueID(RENDER_QUEUE_MAIN)
+        , mRenderQueuePriority(100)
+        , mUpperDistance(0)
+        , mSquaredUpperDistance(0)
+        , mMinPixelSize(0)
+        , mQueryFlags(msDefaultQueryFlags)
+        , mVisibilityFlags(msDefaultVisibilityFlags)
+        , mLightListUpdated(0)
+        , mLightMask(0xFFFFFFFF)
+    {
+        if (Root::getSingletonPtr())
+            mMinPixelSize = Root::getSingleton().getDefaultMinPixelSize();
+    }
     //-----------------------------------------------------------------------
     MovableObject::MovableObject(const String& name)
         : mName(name)

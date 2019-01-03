@@ -75,7 +75,7 @@ namespace Ogre {
         uint                    getRenderWindowCount    () const;
         D3D9RenderWindow*       getRenderWindow         (uint index);
         uint                    getLastPresentFrame     () const { return mLastPresentFrame; }
-
+        void                    WaitUntilGpuIdle();
         void                    setAdapterOrdinalIndex  (D3D9RenderWindow* renderWindow, uint adapterOrdinalInGroupIndex);
         void                    copyContentsToMemory(D3D9RenderWindow* window, const Box& src, const PixelBox &dst, RenderTarget::FrameBuffer buffer);
         void                    clearDeviceStreams      ();

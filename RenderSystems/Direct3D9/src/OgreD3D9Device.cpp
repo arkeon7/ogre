@@ -104,6 +104,25 @@ namespace Ogre
     }
 
     //---------------------------------------------------------------------
+    
+    void D3D9Device::WaitUntilGpuIdle()
+    {
+      if(mDevice)
+      {
+        IDirect3DQuery9* pEventQuery=NULL;
+        mDevice->CreateQuery(D3DQUERYTYPE_EVENT, &pEventQuery);
+
+        if(pEventQuery!=NULL)
+        {
+          pEventQuery->Issue(D3DISSUE_END);
+          while(S_FALSE == pEventQuery->GetData(NULL, 0, D3DGETDATA_FLUSH));
+    
+          pEventQuery->Release();
+        }
+      }
+    }
+    
+    //---------------------------------------------------------------------
     void D3D9Device::detachRenderWindow(D3D9RenderWindow* renderWindow)
     {
         RenderWindowToResourcesIterator it = mMapRenderWindowToResources.find(renderWindow);
@@ -313,7 +332,9 @@ namespace Ogre
 
         //Remove _all_ depth buffers created by this device
         D3D9RenderSystem* renderSystem = static_cast<D3D9RenderSystem*>(Root::getSingleton().getRenderSystem());
-        renderSystem->_cleanupDepthBuffers( mDevice );
+        
+        if (mDevice)
+            renderSystem->_cleanupDepthBuffers( mDevice );
 
         release();
         
@@ -352,10 +373,13 @@ namespace Ogre
     {       
         HRESULT hr;
 
+        if (!mDevice)
+            return false;
+    
         hr = mDevice->TestCooperativeLevel();
 
         if (hr == D3DERR_DEVICELOST ||
-            hr == D3DERR_DEVICENOTRESET)
+            hr == D3DERR_DEVICENOTRESET || hr == D3DERR_INVALIDCALL)
         {
             return true;
         }
@@ -419,7 +443,7 @@ namespace Ogre
     
         renderSystem->fireDeviceEvent(this, "AfterDeviceReset");
 
-        if (hr == D3DERR_DEVICELOST)
+        if (hr == D3DERR_DEVICELOST || hr == D3DERR_INVALIDCALL)
         {
             // UnLock access to rendering device.
             D3D9RenderSystem::getResourceManager()->unlockDeviceAccess();
@@ -760,6 +784,9 @@ namespace Ogre
 
         mD3D9DeviceCapsValid = true;
             
+        if (D3D9RenderSystem::isDirectX9Ex() && primaryRenderWindow->isVSync())
+            static_cast<IDirect3DDevice9Ex*>(mDevice)->SetMaximumFrameLatency(1);
+
         // Initialize device states.
         setupDeviceStates();
 
@@ -891,7 +918,7 @@ namespace Ogre
             // can't do anything about it here, wait until we get 
             // D3DERR_DEVICENOTRESET; rendering calls will silently fail until 
             // then (except Present, but we ignore device lost there too)
-            if (hr == D3DERR_DEVICELOST)
+            if (hr == D3DERR_DEVICELOST || hr == D3DERR_INVALIDCALL)
             {                       
                 releaseRenderWindowResources(renderWindowResources);
                 notifyDeviceLost();                         
@@ -965,8 +992,8 @@ namespace Ogre
         // Ignore full screen since it doesn't really move and it is possible 
         // that it created using multi-head adapter so for a subordinate the
         // native monitor handle and this device handle will be different.
-        if (renderWindow->isFullScreen())
-            return true;
+        //if (renderWindow->isFullScreen())
+        //    return true;
 
         RenderWindowToResourcesIterator it = getRenderWindowIterator(renderWindow);
         HMONITOR    hRenderWindowMonitor = NULL;
@@ -978,13 +1005,47 @@ namespace Ogre
         if (hRenderWindowMonitor == NULL)       
             return false;       
         
+        bool haveMonitor = false;
+        IDirect3D9* direct3D9 = D3D9RenderSystem::getDirect3D9();
+        for (uint i=0; i < direct3D9->GetAdapterCount(); ++i)
+        {
+            if (hRenderWindowMonitor == direct3D9->GetAdapterMonitor(i))
+            {
+                haveMonitor = true;
+                break;
+            }
+        }
 
+        if (!haveMonitor)
+        {
+            // Lock access to rendering device.
+            D3D9RenderSystem::getResourceManager()->lockDeviceAccess();
+
+            //look for new or removed monitor
+            D3D9RenderSystem* renderSystem = static_cast<D3D9RenderSystem*>(Root::getSingleton().getRenderSystem());		
+            renderSystem->refreshD3DSettings();
+
+            // UnLock access to rendering device.
+            D3D9RenderSystem::getResourceManager()->unlockDeviceAccess();
+
+            direct3D9 = D3D9RenderSystem::getDirect3D9();
+            for (uint i=0; i < direct3D9->GetAdapterCount(); ++i)
+            {
+                if (hRenderWindowMonitor == direct3D9->GetAdapterMonitor(i))
+                {
+                    haveMonitor = true;
+                    break;
+                }
+            }
+        }
+        
         // Case this window changed monitor.
-        if (hRenderWindowMonitor != mMonitor)
+        if ((hRenderWindowMonitor != mMonitor) && haveMonitor)
         {   
             // Lock access to rendering device.
             D3D9RenderSystem::getResourceManager()->lockDeviceAccess();
 
+            mMonitor = hRenderWindowMonitor;
             mDeviceManager->linkRenderWindow(renderWindow);
 
             // UnLock access to rendering device.
@@ -1029,8 +1090,16 @@ namespace Ogre
             hr = renderWindowResources->swapChain->Present(NULL, NULL, NULL, NULL, 0);          
         }
 
+        if (hr == S_OK)
+        { 
+            //needed for oculus
+            if (renderWindow->isFullScreen())
+                WaitUntilGpuIdle();
 
-        if( D3DERR_DEVICELOST == hr)
+            renderSystem->fireDeviceEvent(this, "AfterDevicePresent");
+        }
+
+        if( D3DERR_DEVICELOST == hr || hr == D3DERR_INVALIDCALL)
         {
             releaseRenderWindowResources(renderWindowResources);
             notifyDeviceLost();

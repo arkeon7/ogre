@@ -81,7 +81,7 @@ namespace Ogre
             renderSystem->mActiveViewport = NULL;
         }                       
     }
-	
+
     //---------------------------------------------------------------------
     void D3D9DeviceManager::setActiveRenderTargetDevice(D3D9Device* device)
     {
@@ -112,11 +112,12 @@ namespace Ogre
     void D3D9DeviceManager::linkRenderWindow(D3D9RenderWindow* renderWindow)
     {       
         D3D9Device* renderDevice;
+        D3D9Device* prevRenderDevice;
 
         // Detach from previous device.
-        renderDevice = renderWindow->getDevice();       
-        if (renderDevice != NULL)       
-            renderDevice->detachRenderWindow(renderWindow);                     
+        prevRenderDevice = renderWindow->getDevice();       
+        if (prevRenderDevice != NULL)       
+            prevRenderDevice->detachRenderWindow(renderWindow);                     
 
         D3D9RenderWindowList renderWindowsGroup;
 
@@ -134,10 +135,24 @@ namespace Ogre
         }
                 
         renderDevice->acquire();
-        if (mActiveDevice == NULL)          
+        if (mActiveDevice && (mActiveDevice == prevRenderDevice) && mActiveDevice->getRenderWindowCount() == 0)
+        {
+            if (mActiveDevice == mActiveRenderWindowDevice)
+                setActiveRenderTargetDevice(NULL);
+            mActiveDevice->destroy();
+            mActiveDevice = NULL;
+            mActiveRenderWindowDevice = NULL;
             setActiveDevice(renderDevice);      
+    	}
     }
 
+    //---------------------------------------------------------------------
+    void D3D9DeviceManager::WaitUntilGpuIdle(D3D9RenderWindow* renderWindow)
+    {		
+        D3D9Device* renderDevice = renderWindow->getDevice();		
+        renderDevice->WaitUntilGpuIdle();
+    }
+    
     //---------------------------------------------------------------------
     D3D9Device* D3D9DeviceManager::selectDevice(D3D9RenderWindow* renderWindow, D3D9RenderWindowList& renderWindowsGroup)
     {
@@ -181,6 +196,14 @@ namespace Ogre
         if (nvAdapterFound == false)
         {
             renderSystem->mActiveD3DDriver = findDriver(renderWindow);
+            
+            // Give the driver time to spin up when coming back from switch user.
+            while (renderSystem->mActiveD3DDriver == NULL)
+            {
+              Sleep(50);
+              renderSystem->mActiveD3DDriver = findDriver(renderWindow);
+            }
+            
             nAdapterOrdinal = renderSystem->mActiveD3DDriver->getAdapterNumber();
 
             bool bTryUsingMultiheadDevice = false;

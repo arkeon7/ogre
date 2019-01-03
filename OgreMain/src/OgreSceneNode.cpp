@@ -29,8 +29,19 @@ THE SOFTWARE.
 
 namespace Ogre {
     //-----------------------------------------------------------------------
-    SceneNode::SceneNode(SceneManager* creator) : SceneNode(creator, BLANKSTRING)
+    //SceneNode::SceneNode(SceneManager* creator) : SceneNode(creator, BLANKSTRING)
+    //-----------------------------------------------------------------------
+    SceneNode::SceneNode(SceneManager* creator)
+        : Node("")
+        , mCreator(creator)
+        , mAutoTrackTarget(0)
+        , mYawFixed(false)
+        , mIsInSceneGraph(false)
+        , mShowBoundingBox(false)
+        , mHideBoundingBox(false)
+
     {
+        needUpdate();
     }
     //-----------------------------------------------------------------------
     SceneNode::SceneNode(SceneManager* creator, const String& name)

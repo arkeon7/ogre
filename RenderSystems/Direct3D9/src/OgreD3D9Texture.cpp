@@ -347,7 +347,8 @@ namespace Ogre
         {
             IDirect3DDevice9* d3d9Device = D3D9RenderSystem::getResourceCreationDevice(i);
 
-            createInternalResourcesImpl(d3d9Device);
+            if (d3d9Device)
+                createInternalResourcesImpl(d3d9Device);
         }
     }
 

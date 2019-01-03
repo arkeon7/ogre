@@ -23,7 +23,8 @@ getenv_path(OGRE_SOURCE)
 getenv_path(OGRE_HOME)
 
 # construct search paths
-set(Cg_PREFIX_PATH ${Cg_HOME} ${ENV_Cg_HOME}
+set(Cg_PREFIX_PATH ${ENV_SCOL_DEPENDENCIES_PATH}/Cg 
+  ${Cg_HOME} ${ENV_Cg_HOME}
   ${OGRE_SOURCE}/Dependencies
   ${ENV_OGRE_SOURCE}/Dependencies
   ${OGRE_HOME} ${ENV_OGRE_HOME}
@@ -47,26 +48,30 @@ findpkg_framework(Cg)
 find_path(Cg_INCLUDE_DIR NAMES cg.h HINTS ${Cg_FRAMEWORK_INCLUDES} ${Cg_INC_SEARCH_PATH} ${Cg_PKGC_INCLUDE_DIRS} PATH_SUFFIXES Cg)
 
 if (CMAKE_CL_64)
-  set (Cg_LIB_SEARCH_PATH ${Cg_HOME}/lib.x64 ${ENV_Cg_LIB64_PATH}
-    ${ENV_Cg_HOME}/lib.x64 ${Cg_LIB_SEARCH_PATH})
+  set (Cg_LIB_SEARCH_PATH ${ENV_SCOL_DEPENDENCIES_PATH}/Cg/lib64 ${Cg_LIB_SEARCH_PATH} ${Cg_HOME}/lib.x64 ${Cg_HOME}/lib64 ${ENV_Cg_LIB64_PATH}
+    ${ENV_Cg_HOME}/lib.x64 ${ENV_Cg_HOME}/lib64)
 else()
-  set (Cg_LIB_SEARCH_PATH ${Cg_HOME}/lib ${ENV_Cg_LIB_PATH}
-    ${ENV_Cg_HOME}/lib ${Cg_LIB_SEARCH_PATH})
+  set (Cg_LIB_SEARCH_PATH ${ENV_SCOL_DEPENDENCIES_PATH}/Cg/lib ${Cg_LIB_SEARCH_PATH} ${Cg_HOME}/lib ${ENV_Cg_LIB_PATH}
+    ${ENV_Cg_HOME}/lib)
 endif()
 
 find_library(Cg_LIBRARY_REL NAMES ${Cg_LIBRARY_NAMES} HINTS ${Cg_LIB_SEARCH_PATH} ${Cg_PKGC_LIBRARY_DIRS} PATH_SUFFIXES "" Release RelWithDebInfo MinSizeRel)
 find_library(Cg_LIBRARY_DBG NAMES ${Cg_LIBRARY_NAMES_DBG} HINTS ${Cg_LIB_SEARCH_PATH} ${Cg_PKGC_LIBRARY_DIRS} PATH_SUFFIXES "" Debug)
 make_library_set(Cg_LIBRARY)
 
+if (APPLE)
+  set(Cg_LIBRARY_FWK ${Cg_LIBRARY_REL})
+endif (APPLE)
+
 if (WIN32)
 	if (CMAKE_CL_64)
-		set(Cg_BIN_SEARCH_PATH ${OGRE_DEPENDENCIES_DIR}/bin ${CMAKE_SOURCE_DIR}/Dependencies/bin ${Cg_HOME}/bin.x64
-			${ENV_Cg_BIN64_PATH} ${ENV_Cg_HOME}/bin.x64 ${ENV_OGRE_DEPENDENCIES_DIR}/bin
+		set(Cg_BIN_SEARCH_PATH ${ENV_SCOL_DEPENDENCIES_PATH}/Cg/bin64 ${Cg_BIN_SEARCH_PATH} ${OGRE_DEPENDENCIES_DIR}/bin ${CMAKE_SOURCE_DIR}/Dependencies/bin ${Cg_HOME}/bin.x64 ${Cg_HOME}/bin64
+			${ENV_Cg_BIN64_PATH} ${ENV_Cg_HOME}/bin.x64 ${ENV_Cg_HOME}/bin64 ${ENV_OGRE_DEPENDENCIES_DIR}/bin
 			${OGRE_SOURCE}/Dependencies/bin ${ENV_OGRE_SOURCE}/Dependencies/bin
 			${OGRE_SDK}/bin ${ENV_OGRE_SDK}/bin
 			${OGRE_HOME}/bin ${ENV_OGRE_HOME}/bin)
 	else()
-		set(Cg_BIN_SEARCH_PATH ${OGRE_DEPENDENCIES_DIR}/bin ${CMAKE_SOURCE_DIR}/Dependencies/bin ${Cg_HOME}/bin
+		set(Cg_BIN_SEARCH_PATH ${ENV_SCOL_DEPENDENCIES_PATH}/Cg/bin ${Cg_BIN_SEARCH_PATH} ${OGRE_DEPENDENCIES_DIR}/bin ${CMAKE_SOURCE_DIR}/Dependencies/bin ${Cg_HOME}/bin
 			${ENV_Cg_BIN_PATH} ${ENV_Cg_HOME}/bin ${ENV_OGRE_DEPENDENCIES_DIR}/bin
 			${OGRE_SOURCE}/Dependencies/bin ${ENV_OGRE_SOURCE}/Dependencies/bin
 			${OGRE_SDK}/bin ${ENV_OGRE_SDK}/bin

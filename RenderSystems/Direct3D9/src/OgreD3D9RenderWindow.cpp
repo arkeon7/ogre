@@ -487,6 +487,24 @@ namespace Ogre
 
             // deal with centering when switching down to smaller resolution
             HMONITOR hMonitor = MonitorFromWindow(mHWnd, MONITOR_DEFAULTTONEAREST);
+            
+            bool foundMonitor = false;
+            IDirect3D9* direct3D9 = D3D9RenderSystem::getDirect3D9();
+            for (uint i=0; i < direct3D9->GetAdapterCount(); ++i)
+            {
+                if (hMonitor == direct3D9->GetAdapterMonitor(i))
+                {
+                    foundMonitor = true;
+                    break;
+                }
+            }
+
+            //get first monitor
+            if (!foundMonitor && (direct3D9->GetAdapterCount() > 0))
+            {
+              hMonitor = direct3D9->GetAdapterMonitor(0);
+            }
+            
             MONITORINFO monitorInfo;
             memset(&monitorInfo, 0, sizeof(MONITORINFO));
             monitorInfo.cbSize = sizeof(MONITORINFO);
@@ -498,7 +516,7 @@ namespace Ogre
             int left = screenw > winWidth ? ((screenw - winWidth) / 2) : 0;
             int top = screenh > winHeight ? ((screenh - winHeight) / 2) : 0;
             SetWindowPos(mHWnd, HWND_NOTOPMOST, left, top, winWidth, winHeight,
-                SWP_DRAWFRAME | SWP_FRAMECHANGED | SWP_NOACTIVATE);
+                SWP_DRAWFRAME | SWP_FRAMECHANGED | SWP_NOACTIVATE | SWP_NOMOVE);
 
             updateWindowRect();
         }
@@ -534,7 +552,7 @@ namespace Ogre
         presentParams->hDeviceWindow            = mHWnd;
         presentParams->BackBufferWidth          = mWidth;
         presentParams->BackBufferHeight         = mHeight;
-        presentParams->FullScreen_RefreshRateInHz = mIsFullScreen ? mDisplayFrequency : 0;
+        presentParams->FullScreen_RefreshRateInHz = mIsFullScreen ? mDisplayFrequency : D3DPRESENT_RATE_DEFAULT;
         
         if (presentParams->BackBufferWidth == 0)        
             presentParams->BackBufferWidth = 1;                 
@@ -773,6 +791,12 @@ namespace Ogre
             mDevice->present(this);     
     }
 
+    void D3D9RenderWindow::WaitUntilGpuIdle()
+    {
+        if (mDeviceValid)
+            mDevice->WaitUntilGpuIdle();
+    }
+    
     void D3D9RenderWindow::getCustomAttribute( const String& name, void* pData )
     {
         // Valid attributes and their equvalent native functions:

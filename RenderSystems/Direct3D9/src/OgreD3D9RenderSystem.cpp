@@ -342,6 +342,39 @@ namespace Ogre
         D3D9Driver* driver = 0;
         D3D9VideoMode* videoMode;
 
+        //refresh drivers only when we have one device
+        if (mDriverList && msD3D9RenderSystem && msD3D9RenderSystem->mDeviceManager && msD3D9RenderSystem->mDeviceManager->getDeviceCount() <= 1)
+        {
+            mDeviceManager->destroyInactiveRenderDevices();
+            OGRE_DELETE mDriverList;
+
+            SAFE_RELEASE(mD3D);
+            if (mIsDirectX9Ex)
+            {
+                HMODULE hD3D = LoadLibrary(TEXT("d3d9.dll"));
+                if (hD3D)
+                {
+                    typedef HRESULT (WINAPI *DIRECT3DCREATE9EXFUNCTION)(UINT, IDirect3D9Ex**);
+                    DIRECT3DCREATE9EXFUNCTION pfnCreate9Ex = (DIRECT3DCREATE9EXFUNCTION)GetProcAddress(hD3D, "Direct3DCreate9Ex");
+                    if (pfnCreate9Ex)
+                    {
+                        IDirect3D9Ex* d3dEx = NULL;
+                        (*pfnCreate9Ex)(D3D_SDK_VERSION, &d3dEx);
+                        d3dEx->QueryInterface(__uuidof(IDirect3D9), reinterpret_cast<void **>(&mD3D));
+                        mIsDirectX9Ex = true;
+                    }
+                    FreeLibrary(hD3D);
+                }
+            }
+            if ((mD3D == NULL) || (!mAllowDirectX9Ex && mIsDirectX9Ex))
+            {
+                if ( NULL == (mD3D = Direct3DCreate9(D3D_SDK_VERSION)) )
+                    OGRE_EXCEPT( Exception::ERR_INTERNAL_ERROR, "Failed to create Direct3D9 object", "D3D9RenderSystem::D3D9RenderSystem" );
+            }
+
+            mDriverList = NULL;
+        }
+        
         ConfigOptionMap::iterator opt = mOptions.find( "Rendering Device" );
         if( opt != mOptions.end() )
         {

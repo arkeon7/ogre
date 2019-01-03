@@ -188,6 +188,9 @@ else()
 endif()
 
 # Add OgreMain include path
+include_directories("${PROJECT_SOURCE_DIR}/OgreMain/include")
+include_directories("${PROJECT_BINARY_DIR}/include")
+include_directories("${CMAKE_BINARY_DIR}/include")
 if (APPLE_IOS)
   # Set static early for proper dependency detection
   set(OGRE_STATIC TRUE)

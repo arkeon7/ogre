@@ -52,7 +52,7 @@ namespace Ogre {
         void                destroyInactiveRenderDevices    ();
         void                notifyOnDeviceDestroy           (D3D9Device* device);
         D3D9Device*         getDeviceFromD3D9Device         (IDirect3DDevice9* d3d9Device);
-        
+        void                WaitUntilGpuIdle                (D3D9RenderWindow* renderWindow);
     public:
         D3D9DeviceManager   ();
         ~D3D9DeviceManager  ();

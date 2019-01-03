@@ -133,7 +133,7 @@ namespace Ogre {
             HardwareBufferManager::getSingleton().createVertexBuffer(
                 decl->getVertexSize(POSITION_BINDING), 
                 mRenderOp2.vertexData->vertexCount,
-                HardwareBuffer::HBU_STATIC_WRITE_ONLY);
+                HardwareBuffer::HBU_STATIC_WRITE_ONLY, true);
         // bind position
         VertexBufferBinding* binding = mRenderOp2.vertexData->vertexBufferBinding;
         binding->setBinding(POSITION_BINDING, vbuf);

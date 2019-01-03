@@ -70,7 +70,7 @@ namespace Ogre {
             HardwareBufferManager::getSingleton().createVertexBuffer(
             decl->getVertexSize(POSITION_BINDING),
             mRenderOp.vertexData->vertexCount,
-            vBufUsage);
+            vBufUsage, true);
 
         // Bind buffer
         bind->setBinding(POSITION_BINDING, vbuf);
@@ -81,7 +81,7 @@ namespace Ogre {
             HardwareBufferManager::getSingleton().createVertexBuffer(
             decl->getVertexSize(NORMAL_BINDING),
             mRenderOp.vertexData->vertexCount,
-            vBufUsage);
+            vBufUsage, true);
 
         bind->setBinding(NORMAL_BINDING, vbuf);
 
@@ -114,7 +114,7 @@ namespace Ogre {
                 HardwareBufferManager::getSingleton().createVertexBuffer(
                 decl->getVertexSize(TEXCOORD_BINDING),
                 mRenderOp.vertexData->vertexCount,
-                vBufUsage);
+                vBufUsage, true);
 
             // Bind buffer
             bind->setBinding(TEXCOORD_BINDING, tvbuf);

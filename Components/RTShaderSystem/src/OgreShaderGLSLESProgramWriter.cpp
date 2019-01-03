@@ -222,7 +222,7 @@ namespace Ogre {
 
             // Default precision declaration is required in fragment and vertex shaders.
             os << "precision highp float;" << std::endl;
-            os << "precision highp int;" << std::endl;
+            os << "precision mediump int;" << std::endl;
 
             if(mGLSLVersion > 100)
             {

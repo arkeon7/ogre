@@ -142,7 +142,7 @@ namespace Ogre {
                 createVertexBuffer(
                     decl->getVertexSize(POS_TEX_BINDING), 
                     allocatedVertexCount,
-                    HardwareBuffer::HBU_DYNAMIC_WRITE_ONLY);
+                    HardwareBuffer::HBU_DYNAMIC_WRITE_ONLY, true);
         bind->setBinding(POS_TEX_BINDING, vbuf);
 
         // colours
@@ -150,7 +150,7 @@ namespace Ogre {
                 createVertexBuffer(
                     decl->getVertexSize(COLOUR_BINDING), 
                     allocatedVertexCount,
-                    HardwareBuffer::HBU_DYNAMIC_WRITE_ONLY);
+                    HardwareBuffer::HBU_DYNAMIC_WRITE_ONLY, true);
         bind->setBinding(COLOUR_BINDING, vbuf);
 
         // Buffers are restored, but with trash within

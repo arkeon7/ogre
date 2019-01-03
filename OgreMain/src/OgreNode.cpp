@@ -31,7 +31,31 @@ namespace Ogre {
 
     Node::QueuedUpdates Node::msQueuedUpdates;
     //-----------------------------------------------------------------------
-    Node::Node() : Node(BLANKSTRING) {}
+    //Node::Node() : Node(BLANKSTRING) {}
+    //-----------------------------------------------------------------------
+    Node::Node()
+        :mParent(0),
+        mName(""),
+        mNeedParentUpdate(false),
+        mNeedChildUpdate(false),
+        mParentNotified(false),
+        mQueuedForUpdate(false),
+        mInheritOrientation(true),
+        mInheritScale(true),
+        mCachedTransformOutOfDate(true),
+        mOrientation(Quaternion::IDENTITY),
+        mPosition(Vector3::ZERO),
+        mScale(Vector3::UNIT_SCALE),
+        mDerivedOrientation(Quaternion::IDENTITY),
+        mDerivedPosition(Vector3::ZERO),
+        mDerivedScale(Vector3::UNIT_SCALE),
+        mInitialPosition(Vector3::ZERO),
+        mInitialOrientation(Quaternion::IDENTITY),
+        mInitialScale(Vector3::UNIT_SCALE),
+        mListener(0)
+    {
+        needUpdate();
+    }
     //-----------------------------------------------------------------------
     Node::Node(const String& name)
         :mParent(0),

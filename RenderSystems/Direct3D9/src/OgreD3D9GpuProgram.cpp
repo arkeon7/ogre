@@ -125,7 +125,8 @@ namespace Ogre {
         {
             IDirect3DDevice9* d3d9Device = D3D9RenderSystem::getResourceCreationDevice(i);
 
-            loadImpl(d3d9Device);
+            if (d3d9Device)
+                loadImpl(d3d9Device);
         }              
     }
 
@@ -276,7 +277,8 @@ namespace Ogre {
             {
                 IDirect3DDevice9* curD3d9Device = D3D9RenderSystem::getResourceCreationDevice(i);
 
-                loadFromMicrocode(curD3d9Device, microcode);        
+                if (curD3d9Device)
+                    loadFromMicrocode(curD3d9Device, microcode);        
             }
         }       
 

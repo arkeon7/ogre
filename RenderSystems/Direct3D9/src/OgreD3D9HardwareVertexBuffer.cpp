@@ -71,7 +71,8 @@ namespace Ogre {
         {
             IDirect3DDevice9* d3d9Device = D3D9RenderSystem::getResourceCreationDevice(i);
 
-            createBuffer(d3d9Device, mBufferDesc.Pool, false);
+            if (d3d9Device)
+                createBuffer(d3d9Device, mBufferDesc.Pool, false);
         }                       
     }
     //---------------------------------------------------------------------
@@ -363,7 +364,7 @@ namespace Ogre {
                 updateBufferResources(shadowData, bufferResources);
                 mShadowBuffer->unlock();
             }
-            else if (mSourceBuffer != bufferResources && (mUsage & HardwareBuffer::HBU_WRITE_ONLY) == 0)
+            else if (mSourceBuffer != bufferResources /*&& (mUsage & HardwareBuffer::HBU_WRITE_ONLY) == 0*/)
             {               
                 mSourceBuffer->mLockOptions = HBL_READ_ONLY;
                 mSourceLockedBytes = _lockBuffer(mSourceBuffer, bufferResources->mLockOffset, bufferResources->mLockLength);
