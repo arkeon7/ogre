@@ -71,6 +71,7 @@ ELSE ()
     /opt/Imagination/PowerVR/GraphicsSDK/SDK_3.1/Builds/Include
     /usr/openwin/share/include
     /opt/graphics/OpenGL/include /usr/X11R6/include
+    /opt/vc/include
     /usr/include
   )
 
@@ -82,6 +83,7 @@ ELSE ()
           /opt/graphics/OpenGL/lib
           /usr/openwin/lib
           /usr/shlib /usr/X11R6/lib
+          /opt/vc/lib
           /usr/lib
   )
 
@@ -91,6 +93,7 @@ ELSE ()
     /opt/Imagination/PowerVR/GraphicsSDK/SDK_3.1/Builds/Include
     /usr/openwin/share/include
     /opt/graphics/OpenGL/include /usr/X11R6/include
+    /opt/vc/include
     /usr/include
   )
 
@@ -102,6 +105,7 @@ ELSE ()
           /opt/graphics/OpenGL/lib
           /usr/openwin/lib
           /usr/shlib /usr/X11R6/lib
+          /opt/vc/lib
           /usr/lib
   )
 ENDIF ()

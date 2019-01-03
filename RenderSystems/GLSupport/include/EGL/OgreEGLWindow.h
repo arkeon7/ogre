@@ -118,7 +118,9 @@ namespace Ogre {
             bool requiresTextureFlipping() const;
 
             PixelFormat suggestPixelFormat() const;
-    };
+#ifdef RPI
+            virtual void _beginUpdate() = 0;
+#endif    };
 }
 
 #endif

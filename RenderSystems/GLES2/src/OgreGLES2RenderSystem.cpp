@@ -504,12 +504,13 @@ namespace Ogre {
             rsc->setCapability(RSC_DEBUG);
         }
 
+#ifndef RPI
         if ((hasMinGLVersion(3, 0) && OGRE_PLATFORM != OGRE_PLATFORM_EMSCRIPTEN) ||
             checkExtension("GL_EXT_map_buffer_range"))
         {
             rsc->setCapability(RSC_MAPBUFFER);
         }
-
+#endif
         if(hasMinGLVersion(3, 0))
         {
             // Check if render to vertex buffer (transform feedback in OpenGL)
@@ -1806,7 +1807,7 @@ namespace Ogre {
         if (mCurrentContext)
             mCurrentContext->setCurrent();
 
-#if OGRE_PLATFORM == OGRE_PLATFORM_APPLE_IOS || OGRE_PLATFORM == OGRE_PLATFORM_ANDROID || OGRE_PLATFORM == OGRE_PLATFORM_WIN32
+#if OGRE_PLATFORM == OGRE_PLATFORM_APPLE_IOS || OGRE_PLATFORM == OGRE_PLATFORM_ANDROID || OGRE_PLATFORM == OGRE_PLATFORM_WIN32 || defined(RPI)
         // ios: EAGL2Support redirects to glesw for get_proc. Overwriting it there would create an infinite loop
         // android: eglGetProcAddress fails in some cases (e.g. Virtual Device), whereas dlsym always works.
         if (glGetError == NULL && gleswInit())

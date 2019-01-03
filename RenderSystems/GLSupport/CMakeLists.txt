@@ -64,6 +64,14 @@ elseif (APPLE)
     ${CMAKE_CURRENT_SOURCE_DIR}/include/OSX 
     ${PROJECT_SOURCE_DIR}/OgreMain/include/OSX)
   set(PLATFORM_LIBS ${Cocoa_LIBRARY_FWK})
+elseif (RPI)
+  file(GLOB PLATFORM_HEADERS "include/EGL/RPI/*.h" "include/EGL/*.h")
+  file(GLOB PLATFORM_SOURCES "src/EGL/RPI/*.cpp" "src/EGL/*.cpp")
+  
+  set(NATIVE_INCLUDES
+        ${CMAKE_CURRENT_SOURCE_DIR}/include/EGL
+        ${CMAKE_CURRENT_SOURCE_DIR}/include/EGL/RPI ${EGL_INCLUDE_DIR})
+  set(PLATFORM_LIBS ${X11_LIBRARIES} ${X11_Xrandr_LIB} ${EGL_LIBRARIES})  
 elseif (UNIX)
   if(OGRE_GLSUPPORT_USE_EGL)
     file(GLOB PLATFORM_HEADERS "include/EGL/X11/*.h" "include/EGL/*.h")
