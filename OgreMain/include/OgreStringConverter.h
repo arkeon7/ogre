@@ -36,6 +36,69 @@ THE SOFTWARE.
 #include "OgreMatrix4.h"
 #include "OgreVector2.h"
 
+
+namespace std
+{
+#if OGRE_PLATFORM == OGRE_PLATFORM_ANDROID
+	#include <cstdlib>
+	#include <string>
+	#include <sstream>
+
+	inline long double strtold(const char * str, char ** str_end)
+	{
+	    return strtod(str, str_end);
+	}
+
+	template<typename T>
+	std::string to_string(T const& data)
+	{
+	    std::ostringstream ss;
+	    ss << data;
+	    return ss.str();
+	}
+
+	inline int stoi(const std::string& str, std::size_t* pos = 0, int base = 10)
+	{
+	    return strtol(str.c_str(), nullptr, base);
+	}
+
+	inline long stol(const std::string& str, std::size_t* pos = 0, int base = 10)
+	{
+	    return strtol(str.c_str(), nullptr, base);
+	}
+
+	inline long long stoll(const std::string& str, std::size_t* pos = 0, int base = 10)
+	{
+	    return strtoll(str.c_str(), nullptr, base);
+	}
+
+	inline unsigned long stoul(const std::string& str, std::size_t* pos = 0, int base = 10)
+	{
+	    return strtoul(str.c_str(), nullptr, base);
+	}
+
+	inline unsigned long long stoull(const std::string& str, std::size_t* pos = 0, int base = 10)
+	{
+	    return strtoull(str.c_str(), nullptr, base);
+	}
+
+	inline float stof(const std::string& str, std::size_t* pos = 0)
+	{
+	    return strtof(str.c_str(), nullptr);
+	}
+
+	inline double stod(const std::string& str, std::size_t* pos = 0)
+	{
+	    return strtod(str.c_str(), nullptr);
+	}
+
+	inline long double stold(const std::string& str, std::size_t* pos = 0)
+	{
+	    return strtold(str.c_str(), nullptr);
+	}
+#endif
+}
+
 namespace Ogre {
 
     /** \addtogroup Core
@@ -58,8 +121,7 @@ namespace Ogre {
         like int and Real just use the underlying C runtime library atof and atoi family methods,
         however custom types like Vector3, ColourValue and Matrix4 are also supported by this class
         using custom formats.
-    */
-    class _OgreExport StringConverter
+    */    class _OgreExport StringConverter
     {
     public:
         static String toString(int32 val) { return std::to_string(val); };

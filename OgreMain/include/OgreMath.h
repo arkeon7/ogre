@@ -31,6 +31,10 @@ THE SOFTWARE.
 #include "OgrePrerequisites.h"
 #include "OgreHeaderPrefix.h"
 
+#ifndef UINT16_MAX
+#define UINT16_MAX (65535)
+#endif
+
 namespace Ogre
 {
     /** \addtogroup Core

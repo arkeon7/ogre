@@ -120,7 +120,8 @@ namespace Ogre {
             PixelFormat suggestPixelFormat() const;
 #ifdef RPI
             virtual void _beginUpdate() = 0;
-#endif    };
+#endif
+	};
 }
 
 #endif

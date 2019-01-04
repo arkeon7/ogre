@@ -394,6 +394,7 @@ namespace Ogre {
     
     void GLStateCacheManager::setEnabled(GLenum flag, bool enabled)
     {
+/*
 #ifdef OGRE_ENABLE_STATE_CACHE
         auto iter = std::find(mEnableVector.begin(), mEnableVector.end(), flag);
         bool was_enabled = iter != mEnableVector.end();
@@ -410,6 +411,7 @@ namespace Ogre {
             mEnableVector.push_back(flag);
         }
 #endif
+*/
         if(!enabled)
         {
             glDisable(flag);
