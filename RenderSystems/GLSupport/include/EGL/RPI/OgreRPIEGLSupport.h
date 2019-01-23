@@ -37,7 +37,9 @@ namespace Ogre {
     public:
         RPIEGLSupport(int profile);
         virtual ~RPIEGLSupport();
-
+        
+        ConfigOptionMap getConfigOptions();
+        
         virtual void switchMode(uint& width, uint& height, short& frequency);
         
         RenderWindow* newWindow(const String& name,
