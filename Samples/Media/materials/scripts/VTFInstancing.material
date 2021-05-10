@@ -6,7 +6,7 @@
 //--------------------------------------------------------------
 // GLSL Programs
 //--------------------------------------------------------------
-vertex_program Ogre/Instancing/VTF_glsl_vs glsl
+vertex_program Ogre/Instancing/VTF_glsl_vs glsl glsles
 {
 	source VTFInstancing.vert
 
@@ -20,7 +20,7 @@ vertex_program Ogre/Instancing/VTF_glsl_vs glsl
 	}
 }
 
-vertex_program Ogre/Instancing/VTF/shadow_caster_glsl_vs glsl
+vertex_program Ogre/Instancing/VTF/shadow_caster_glsl_vs glsl glsles
 {
 	source VTFInstancing.vert
 
@@ -34,7 +34,7 @@ vertex_program Ogre/Instancing/VTF/shadow_caster_glsl_vs glsl
 	}
 }
 
-vertex_program Ogre/Instancing/VTF_dq_glsl_vs glsl
+vertex_program Ogre/Instancing/VTF_dq_glsl_vs glsl glsles
 {
 	source VTFInstancing.vert
 
@@ -48,7 +48,7 @@ vertex_program Ogre/Instancing/VTF_dq_glsl_vs glsl
 	}
 }
 
-vertex_program Ogre/Instancing/VTF/shadow_caster_dq_glsl_vs glsl
+vertex_program Ogre/Instancing/VTF/shadow_caster_dq_glsl_vs glsl glsles
 {
 	source VTFInstancing.vert
 
@@ -62,7 +62,7 @@ vertex_program Ogre/Instancing/VTF/shadow_caster_dq_glsl_vs glsl
 	}
 }
 
-vertex_program Ogre/Instancing/VTF_dq_two_weights_glsl_vs glsl
+vertex_program Ogre/Instancing/VTF_dq_two_weights_glsl_vs glsl glsles
 {
 	source VTFInstancing.vert
 
@@ -76,7 +76,7 @@ vertex_program Ogre/Instancing/VTF_dq_two_weights_glsl_vs glsl
 	}
 }
 
-vertex_program Ogre/Instancing/VTF/shadow_caster_dq_two_weights_glsl_vs glsl
+vertex_program Ogre/Instancing/VTF/shadow_caster_dq_two_weights_glsl_vs glsl glsles
 {
 	source VTFInstancing.vert
 
@@ -160,93 +160,6 @@ vertex_program Ogre/Instancing/VTF/shadow_caster_dq_two_weights_hlsl_vs hlsl
 }
 
 //--------------------------------------------------------------
-// GLSL ES Programs
-//--------------------------------------------------------------
-vertex_program Ogre/Instancing/VTF_glsles_vs glsles
-{
-	source VTFInstancing.vert
-
-	preprocessor_defines DEPTH_SHADOWRECEIVER=1
-
-	uses_vertex_texture_fetch true
-
-	default_params
-	{
-		param_named			matrixTexture				int 2
-	}
-}
-
-vertex_program Ogre/Instancing/VTF/shadow_caster_glsles_vs glsles
-{
-	source VTFInstancing.vert
-
-	preprocessor_defines DEPTH_SHADOWCASTER=1
-
-	uses_vertex_texture_fetch true
-
-	default_params
-	{
-		param_named			matrixTexture				int 0
-	}
-}
-
-vertex_program Ogre/Instancing/VTF_dq_glsles_vs glsles
-{
-	source VTFInstancing.vert
-
-	preprocessor_defines ST_DUAL_QUATERNION,DEPTH_SHADOWRECEIVER=1
-
-	uses_vertex_texture_fetch true
-
-	default_params
-	{
-		param_named			matrixTexture				int 2
-	}
-}
-
-vertex_program Ogre/Instancing/VTF/shadow_caster_dq_glsles_vs glsles
-{
-	source VTFInstancing.vert
-
-	preprocessor_defines ST_DUAL_QUATERNION,DEPTH_SHADOWCASTER=1
-
-	uses_vertex_texture_fetch true
-
-	default_params
-	{
-		param_named			matrixTexture				int 0
-	}
-}
-
-vertex_program Ogre/Instancing/VTF_dq_two_weights_glsles_vs glsles
-{
-	source VTFInstancing.vert
-
-	preprocessor_defines ST_DUAL_QUATERNION,BONE_TWO_WEIGHTS,DEPTH_SHADOWRECEIVER=1
-
-	uses_vertex_texture_fetch true
-
-	default_params
-	{
-		param_named			matrixTexture				int 2
-	}
-}
-
-vertex_program Ogre/Instancing/VTF/shadow_caster_dq_two_weights_glsles_vs glsles
-{
-	source VTFInstancing.vert
-
-	preprocessor_defines ST_DUAL_QUATERNION,BONE_TWO_WEIGHTS,DEPTH_SHADOWCASTER=1
-
-	uses_vertex_texture_fetch true
-
-	default_params
-	{
-		param_named			matrixTexture				int 0
-	}
-}
-
-//--------------------------------------------------------------
 // CG Programs
 //--------------------------------------------------------------
 vertex_program Ogre/Instancing/VTF_cg_vs cg
@@ -321,7 +234,6 @@ vertex_program Ogre/Instancing/VTF/shadow_caster_dq_two_weights_cg_vs cg
 vertex_program Ogre/Instancing/VTF_vs unified
 {
 	delegate Ogre/Instancing/VTF_glsl_vs
-	delegate Ogre/Instancing/VTF_glsles_vs
 	delegate Ogre/Instancing/VTF_hlsl_vs
 	delegate Ogre/Instancing/VTF_cg_vs
 
@@ -329,7 +241,6 @@ vertex_program Ogre/Instancing/VTF_vs unified
 	{
 		param_named_auto	viewProjMatrix				viewproj_matrix
 
-		param_named_auto	depthRange					shadow_scene_depth_range 0
 		param_named_auto	texViewProjMatrix			texture_viewproj_matrix 0
 	}
 }
@@ -337,21 +248,18 @@ vertex_program Ogre/Instancing/VTF_vs unified
 vertex_program Ogre/Instancing/VTF/shadow_caster_vs unified
 {
 	delegate Ogre/Instancing/VTF/shadow_caster_glsl_vs
-	delegate Ogre/Instancing/VTF/shadow_caster_glsles_vs
 	delegate Ogre/Instancing/VTF/shadow_caster_hlsl_vs
 	delegate Ogre/Instancing/VTF/shadow_caster_cg_vs
 
 	default_params
 	{
 		param_named_auto	viewProjMatrix				viewproj_matrix
-		param_named_auto	depthRange					scene_depth_range
 	}
 }
 
 vertex_program Ogre/Instancing/VTF_dq_vs unified
 {
 	delegate Ogre/Instancing/VTF_dq_glsl_vs
-	delegate Ogre/Instancing/VTF_dq_glsles_vs
 	delegate Ogre/Instancing/VTF_dq_hlsl_vs
 	delegate Ogre/Instancing/VTF_dq_cg_vs
 
@@ -359,7 +267,6 @@ vertex_program Ogre/Instancing/VTF_dq_vs unified
 	{
 		param_named_auto	viewProjMatrix				viewproj_matrix
 
-		param_named_auto	depthRange				shadow_scene_depth_range 0
 		param_named_auto	texViewProjMatrix			texture_viewproj_matrix 0
 	}
 }
@@ -367,21 +274,18 @@ vertex_program Ogre/Instancing/VTF_dq_vs unified
 vertex_program Ogre/Instancing/VTF/shadow_caster_dq_vs unified
 {
 	delegate Ogre/Instancing/VTF/shadow_caster_dq_glsl_vs
-	delegate Ogre/Instancing/VTF/shadow_caster_dq_glsles_vs
 	delegate Ogre/Instancing/VTF/shadow_caster_dq_hlsl_vs
 	delegate Ogre/Instancing/VTF/shadow_caster_dq_cg_vs
 
 	default_params
 	{
 		param_named_auto	viewProjMatrix				viewproj_matrix
-		param_named_auto	depthRange				scene_depth_range
 	}
 }
 
 vertex_program Ogre/Instancing/VTF_dq_two_weights_vs unified
 {
 	delegate Ogre/Instancing/VTF_dq_two_weights_glsl_vs
-	delegate Ogre/Instancing/VTF_dq_two_weights_glsles_vs
 	delegate Ogre/Instancing/VTF_dq_two_weights_hlsl_vs
 	delegate Ogre/Instancing/VTF_dq_two_weights_cg_vs
 
@@ -389,7 +293,6 @@ vertex_program Ogre/Instancing/VTF_dq_two_weights_vs unified
 	{
 		param_named_auto	viewProjMatrix				viewproj_matrix
 
-		param_named_auto	depthRange				shadow_scene_depth_range 0
 		param_named_auto	texViewProjMatrix			texture_viewproj_matrix 0
 	}
 }
@@ -397,14 +300,12 @@ vertex_program Ogre/Instancing/VTF_dq_two_weights_vs unified
 vertex_program Ogre/Instancing/VTF/shadow_caster_dq_two_weights_vs unified
 {
 	delegate Ogre/Instancing/VTF/shadow_caster_dq_two_weights_glsl_vs
-	delegate Ogre/Instancing/VTF/shadow_caster_dq_two_weights_glsles_vs
 	delegate Ogre/Instancing/VTF/shadow_caster_dq_two_weights_hlsl_vs
 	delegate Ogre/Instancing/VTF/shadow_caster_dq_two_weights_cg_vs
 
 	default_params
 	{
 		param_named_auto	viewProjMatrix				viewproj_matrix
-		param_named_auto	depthRange				scene_depth_range
 	}
 }
 
@@ -493,7 +394,7 @@ abstract material Examples/Instancing/VTF
 
 			texture_unit Diffuse
 			{
-				texture_alias		DiffuseMap
+				texture		$DiffuseMap
 			}
 
 			texture_unit shadow0
@@ -531,7 +432,7 @@ abstract material Examples/Instancing/VTF_dq
 
 			texture_unit Diffuse
 			{
-				texture_alias		DiffuseMap
+				texture		$DiffuseMap
 			}
 
 			texture_unit shadow0
@@ -570,7 +471,7 @@ abstract material Examples/Instancing/VTF_dq_two_weights
 
 			texture_unit Diffuse
 			{
-				texture_alias		DiffuseMap
+				texture		$DiffuseMap
 				tex_address_mode clamp
 			}
 
@@ -592,15 +493,15 @@ abstract material Examples/Instancing/VTF_dq_two_weights
 
 material Examples/Instancing/VTF/Robot : Examples/Instancing/VTF
 {
-	set_texture_alias	DiffuseMap	r2skin.jpg
+	set	$DiffuseMap	r2skin.jpg
 }
 
 material Examples/Instancing/VTF/Robot_dq : Examples/Instancing/VTF_dq
 {
-	set_texture_alias	DiffuseMap	r2skin.jpg
+	set	$DiffuseMap	r2skin.jpg
 }
 
 material Examples/Instancing/VTF/spine_dq_two_weights : Examples/Instancing/VTF_dq_two_weights
 {
-	set_texture_alias	DiffuseMap	circuit.dds
+	set	$DiffuseMap	circuit.dds
 }

@@ -21,36 +21,10 @@ set(SOURCE_FILES
   src/OgreXMLSkeletonSerializer.cpp
 )
 
-# If TinyXML is not found on the system use the embedded version.
-if(NOT TINYXML_FOUND)
-  list(APPEND SOURCE_FILES
-    src/tinystr.cpp
-    src/tinyxml.cpp
-    src/tinyxmlerror.cpp
-    src/tinyxmlparser.cpp)
-
-  list(APPEND HEADER_FILES
-    include/tinystr.h
-    include/tinyxml.h)
-
-  set(TINYXML_INCLUDE_DIR "")
-  set(TINYXML_LIBRARIES "")
-endif(NOT TINYXML_FOUND)
-
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include ${TINYXML_INCLUDE_DIR})
-add_definitions(-DTIXML_USE_STL)
-
-if(UNIX)
-    add_definitions(-Wno-shadow -Wno-implicit-fallthrough) # inside tinyxml sources
-endif()
-
 add_executable(OgreXMLConverter ${HEADER_FILES} ${SOURCE_FILES})
-target_link_libraries(OgreXMLConverter ${OGRE_LIBRARIES} ${TINYXML_LIBRARIES} ${OGRE_MeshLodGenerator_LIBRARIES})
+target_include_directories(OgreXMLConverter PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+target_link_libraries(OgreXMLConverter OgreMain pugixml)
 
-if (APPLE)
-    set_target_properties(OgreXMLConverter PROPERTIES
-        LINK_FLAGS "-framework Cocoa")
-endif ()
 if (OGRE_PROJECT_FOLDERS)
 	set_property(TARGET OgreXMLConverter PROPERTY FOLDER Tools)
 endif ()

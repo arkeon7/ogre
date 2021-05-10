@@ -3,7 +3,7 @@ uniform sampler2D inRTT;
 uniform vec4 sampleOffsets[15];
 uniform vec4 sampleWeights[15];
 
-varying vec2 uv;
+varying vec2 oUv0;
 
 void main(void)
 {
@@ -13,7 +13,7 @@ void main(void)
     for( int i = 0; i < 15; i++ )
     {
         // Sample from adjacent points, 7 each side and central
-        sampleUV = uv + sampleOffsets[i].xy;
+        sampleUV = oUv0 + sampleOffsets[i].xy;
         accum += sampleWeights[i] * texture2D(inRTT, sampleUV);
     }
     

@@ -59,7 +59,7 @@ Each technique can be made up of many @ref Passes, that is a complete render of 
 
 Within each pass, there can be zero or many @ref Texture-Units in use. These define the texture to be used, and optionally some blending operations (which use multitexturing) and texture effects.
 
-You can also reference vertex and fragment programs (or vertex and pixel shaders, if you want to use that terminology) in a pass with a given set of parameters. Programs themselves are declared in separate .program scripts (See @ref Declaring-Vertex_002fGeometry_002fFragment-Programs) and are used as described in @ref Using-Vertex_002fGeometry_002fFragment-Programs-in-a-Pass.
+You can also reference vertex and fragment programs (or vertex and pixel shaders, if you want to use that terminology) in a pass with a given set of parameters. Programs themselves are declared in separate .program scripts (See [GPU Program Scripts](@ref Declaring-Vertex_002fGeometry_002fFragment-Programs)) and are used as described in @ref Using-Vertex_002fGeometry_002fFragment-Programs-in-a-Pass.
 
 <a name="Top_002dlevel-material-attributes"></a>
 
@@ -127,9 +127,7 @@ This attribute associates a texture alias with a texture name.
 @par
 Format: set\_texture\_alias &lt;alias name&gt; &lt;texture name&gt;
 
-This attribute can be used to set the textures used in texture unit states that were inherited from another material.(See @ref Texture-Aliases)
-
-
+@deprecated texture aliases are a restricted version of @ref Script-Variables, which you should instead.
 
 # Techniques {#Techniques}
 
@@ -192,13 +190,15 @@ Techniques also contain one or more @ref Passes (and there must be at least one)
 
 ## shadow\_caster\_material
 
-When using @ref Texture_002dbased-Shadows you can specify an alternate material to use when rendering the object using this material into the shadow texture. This is like a more advanced version of using shadow\_caster\_vertex\_program, however note that for the moment you are expected to render the shadow in one pass, i.e. only the first pass is respected.
+When using @ref Texture_002dbased-Shadows you can specify an alternate material to use when rendering the object using this material into the shadow texture. This is like a more advanced version of using @c shadow_caster_vertex_program, however note that for the moment you are expected to render the shadow in one pass, i.e. only the first pass is respected.
 
 <a name="shadow_005freceiver_005fmaterial"></a><a name="shadow_005freceiver_005fmaterial-1"></a>
 
 ## shadow\_receiver\_material
 
-When using @ref Texture_002dbased-Shadows you can specify an alternate material to use when performing the receiver shadow pass. Note that this explicit ’receiver’ pass is only done when you’re **not** using @ref Integrated-Texture-Shadows - i.e. the shadow rendering is done separately (either as a modulative pass, or a masked light pass). This is like a more advanced version of using shadow\_receiver\_vertex\_program and shadow\_receiver\_fragment\_program, however note that for the moment you are expected to render the shadow in one pass, i.e. only the first pass is respected.
+When using @ref Texture_002dbased-Shadows you can specify an alternate material to use when performing the receiver shadow pass. This is like a more advanced version of using @c shadow_receiver_vertex_program and @c shadow_receiver_fragment_program, however note that for the moment you are expected to render the shadow in one pass, i.e. only the first pass is respected.
+
+@note This explicit ’receiver’ pass is only done when you’re **not** using @ref Integrated-Texture-Shadows - i.e. the shadow rendering is done separately (either as a modulative pass, or a masked light pass).
 
 <a name="gpu_005fvendor_005frule"></a><a name="gpu_005fdevice_005frule"></a><a name="gpu_005fvendor_005frule-and-gpu_005fdevice_005frule"></a>
 
@@ -285,7 +285,7 @@ Sets the ambient colour reflectance properties of this pass.
 Format: ambient (&lt;red&gt; &lt;green&gt; &lt;blue&gt; \[&lt;alpha&gt;\]| vertexcolour)<br> NB valid colour values are between 0.0 and 1.0.
 
 @copydetails Ogre::Pass::setAmbient
-@note When using shader programs, you have to explicitely forward this property in the @ref Program-Parameter-Specification
+@shaderparam
 
 @par
 Example: ambient 0.0 0.8 0.0
@@ -301,7 +301,7 @@ Sets the diffuse colour reflectance properties of this pass.
 Format: diffuse (&lt;red&gt; &lt;green&gt; &lt;blue&gt; \[&lt;alpha&gt;\]| vertexcolour)<br> NB valid colour values are between 0.0 and 1.0.
 
 @copydetails Ogre::Pass::setDiffuse
-@note When using shader programs, you have to explicitely forward this property in the @ref Program-Parameter-Specification
+@shaderparam
 
 @par
 Example: diffuse 1.0 0.5 0.5
@@ -322,7 +322,7 @@ It is also possible to make the specular reflectance track the vertex colour as 
 the mesh instead of the colour values.
 
 @copydetails Ogre::Pass::setShininess
-@note When using shader programs, you have to explicitely forward this property in the @ref Program-Parameter-Specification
+@shaderparam
 
 @par
 Example: specular 1.0 1.0 1.0 12.5
@@ -341,7 +341,7 @@ Format: emissive (&lt;red&gt; &lt;green&gt; &lt;blue&gt; \[&lt;alpha&gt;\]| vert
 
 Unlike the name suggests, this object doesn’t act as a light source for other objects in the scene (if you want it to, you have to create a light which is centered on the object).
 @copydetails Ogre::Pass::setSelfIllumination
-@note When using shader programs, you have to explicitely forward this property in the @ref Program-Parameter-Specification
+@shaderparam
 
 @par
 Example: emissive 1.0 0.0 0.0
@@ -509,6 +509,9 @@ Format: alpha\_rejection &lt;function&gt; &lt;value&gt;
 Example: alpha\_rejection greater\_equal 128
 
 The function parameter can be any of the options listed in the material depth\_function attribute. The value parameter can theoretically be any value between 0 and 255, but is best limited to 0 or 128 for hardware compatibility.
+
+@ffp_rtss_only
+
 @par
 Default: alpha\_rejection always\_pass
 
@@ -669,7 +672,7 @@ Format: polygon\_mode\_overrideable &lt;override&gt;
 
 ## fog\_override
 
-Tells the pass whether it should override the scene fog settings, and enforce it’s own. Very useful for things that you don’t want to be affected by fog when the rest of the scene is fogged, or vice versa. Note that this only affects fixed-function fog - the original scene fog parameters are still sent to shaders which use the fog\_params parameter binding (this allows you to turn off fixed function fog and calculate it in the shader instead; if you want to disable shader fog you can do that through shader parameters anyway). 
+Tells the pass whether it should override the scene fog settings, and enforce it’s own. Very useful for things that you don’t want to be affected by fog when the rest of the scene is fogged, or vice versa.
 @par
 Format: fog\_override &lt;override?&gt; \[&lt;type&gt; &lt;colour&gt; &lt;density&gt; &lt;start&gt; &lt;end&gt;\]
 @par
@@ -736,9 +739,16 @@ Default: max\_lights 8<br>
 
 Sets whether or not this pass is iterated, i.e. issued more than once.
 @par
-Format 1: iteration &lt;once | once\_per\_light&gt; \[lightType\] Format 2: iteration &lt;number&gt; \[&lt;per\_light&gt; \[lightType\]\] 
+Format 1: iteration &lt;once | once\_per\_light&gt; \[lightType\]
+
 @par
-Format 3: iteration &lt;number&gt; \[&lt;per\_n\_lights&gt; &lt;num\_lights&gt; \[lightType\]\] Examples:
+Format 2: iteration &lt;number&gt; \[&lt;per\_light&gt; \[lightType\]
+
+@par
+Format 3: iteration &lt;number&gt; \[&lt;per\_n\_lights&gt; &lt;num\_lights&gt; \[lightType\]
+
+@par
+Examples:
 
 <dl compact="compact">
 <dt>iteration once</dt> <dd>
@@ -868,6 +878,8 @@ material Fur
 @par
 Format: point\_size &lt;size&gt; Default: point\_size 1.0
 
+@ffp_rtss_only
+
 <a name="point_005fsprites"></a><a name="point_005fsprites-1"></a>
 
 ## point\_sprites
@@ -888,6 +900,7 @@ Format: point\_size\_attenuation &lt;enabled&gt; \[constant linear quadratic\] D
 
 @copydetails Ogre::Pass::setPointAttenuation
 
+@ffp_rtss_only
 
 <a name="point_005fsize_005fmin"></a><a name="point_005fsize_005fmin-1"></a>
 
@@ -916,11 +929,11 @@ Default: line_width 1
 
 # Texture Units {#Texture-Units}
 
-Here are the attributes you can use in a ’texture\_unit’ section of a .material script:
+Here are the attributes you can use in a @c texture_unit section of a .material script:
 
 <a name="Available-Texture-Layer-Attributes"></a>
 
-## Available Texture Layer Attributes
+## Available Texture Unit Attributes
 
 -   [texture\_alias](#texture_005falias)
 -   [texture](#texture)
@@ -943,9 +956,13 @@ Here are the attributes you can use in a ’texture\_unit’ section of a .mater
 -   [content\_type](#content_005ftype)
 -   [sampler_ref](#sampler_ref)
 
-Additionally you can use all attributes of @ref Samplers directly to implicitly create a Ogre::Sampler contained in this TextureUnit.
+@note Furthermore all attributes of @ref Samplers are available. Using any of them will create a new Ogre::Sampler local to the texture unit.
+This means that any changes you made to the Default Sampler e.g. via Ogre::MaterialManager::setDefaultTextureFiltering have no effect anymore.
+If several texture units share the same Sampler settings, you are encouraged to reference the same Sampler via [sampler_ref](#sampler_ref) for improved performance.
 
-You can also use a nested ’texture\_source’ section in order to use a special add-in as a source of texture data, See @ref External-Texture-Sources for details.
+You can also use nested section in order to use a special add-ins
+- @c texture_source as a source of texture data, see @ref External-Texture-Sources for details
+- @c rtshader_system for addtitional layer blending  options, see @ref rtss for details.
 
 <a name="Attribute-Descriptions-1"></a>
 
@@ -961,7 +978,7 @@ Format: texture\_alias &lt;name&gt;
 @par
 Example: texture\_alias NormalMap
 
-Setting the texture alias name is useful if this material is to be inherited by other other materials and only the textures will be changed in the new material.(See @ref Texture-Aliases) Default: If a texture\_unit has a name then the texture\_alias defaults to the texture\_unit name.
+@deprecated texture aliases are a restricted version of @ref Script-Variables, which you should instead.
 
 <a name="texture"></a><a name="texture-1"></a>
 
@@ -969,7 +986,7 @@ Setting the texture alias name is useful if this material is to be inherited by 
 
 Sets the name of the static texture image this layer will use.
 @par
-Format: texture &lt;texturename&gt; \[&lt;type&gt;\] \[unlimited | numMipMaps\] \[alpha\] \[&lt;PixelFormat&gt;\] \[gamma\]
+Format: texture &lt;texturename&gt; \[&lt;type&gt;\] \[unlimited | numMipMaps\] \[&lt;PixelFormat&gt;\] \[gamma\]
 @par
 Example: texture funkywall.jpg
 
@@ -998,9 +1015,6 @@ Alternatively 1 cube texture can be used if supported by the texture format(DDS 
 
 @param numMipMaps
 specify the number of mipmaps to generate for this texture. The default is ’unlimited’ which means mips down to 1x1 size are generated. You can specify a fixed number (even 0) if you like instead. Note that if you use the same texture in many material scripts, the number of mipmaps generated will conform to the number specified in the first texture\_unit used to load the texture - so be consistent with your usage.
-
-@param alpha @copydoc Ogre::Texture::setTreatLuminanceAsAlpha
-Default: none
 
 @param PixelFormat
 specify the desired pixel format of the texture to create, which may be different to the pixel format of the texture file being loaded. Bear in mind that the final pixel format will be constrained by hardware capabilities so you may not get exactly what you ask for. 
@@ -1039,9 +1053,12 @@ Sets the images used in a cubic texture, i.e. one made up of 6 individual images
 @par
 Format1 (short): cubic\_texture &lt;base\_name&gt; &lt;combinedUVW|separateUV&gt;
 
+@deprecated use the format '`texture <basename> cubic`' instead
+
 The base\_name in this format is something like ’skybox.jpg’, and the system will expect you to provide skybox\_fr.jpg, skybox\_bk.jpg, skybox\_up.jpg, skybox\_dn.jpg, skybox\_lf.jpg, and skybox\_rt.jpg for the individual faces.
+
 @par
-Format2 (long): cubic\_texture &lt;front&gt; &lt;back&gt; &lt;left&gt; &lt;right&gt; &lt;up&gt; &lt;down&gt; separateUV
+Format2 (long): cubic\_texture &lt;front&gt; &lt;back&gt; &lt;left&gt; &lt;right&gt; &lt;up&gt; &lt;down&gt; &lt;combinedUVW|separateUV&gt;
 
 In this case each face is specified explicitly, incase you don’t want to conform to the image naming standards above. You can only use this for the separateUV version since the combinedUVW version requires a single texture name to be assigned to the combined 3D texture (see below).
 
@@ -1050,20 +1067,16 @@ In both cases the final parameter means the following:
 <dl compact="compact">
 <dt>separateUV</dt> <dd>
 
-The 6 textures are kept separate but are all referenced by this single texture layer. One texture at a time is active (they are actually stored as 6 frames), and they are addressed using standard 2D UV coordinates.
+@deprecated Use real cubic textures due to hardware support
 
-@note This type is only useful with skyboxes where only one face is rendered at a time. For everything else real cubic textures are better due to hardware support.
+The 6 textures are kept separate but are all referenced by this single texture layer. One texture at a time is active (they are actually stored as 6 frames), and they are addressed using standard 2D UV coordinates.
 </dd>
 <dt>combinedUVW</dt> <dd>
 
 The 6 textures are combined into a single ’cubic’ texture map which is then addressed using 3D texture coordinates.
 
-@deprecated use the format `texture <basename> cubic` instead
-
 </dd>
 </dl> <br>
-@par
-Default: none
 
 <a name="binding_005ftype"></a><a name="binding_005ftype-1"></a>
 
@@ -1120,7 +1133,7 @@ Default: content\_type named
 @par
 Format: tex\_coord\_set &lt;set\_num&gt;
 
-@note Only has an effect with the fixed-function pipeline or the @ref rtss
+@ffp_rtss_only
 
 @par
 Example: tex\_coord\_set 2
@@ -1131,7 +1144,7 @@ Default: tex\_coord\_set 0
 
 ## colour\_op
 
-@note Only has an effect with the fixed-function pipeline or the @ref rtss
+@ffp_rtss_only
 
 Determines how the colour of this texture layer is combined with the one below it (or the lighting effect on the geometry if this is the first layer).
 @par
@@ -1146,7 +1159,7 @@ Default: colour\_op modulate
 
 ## colour\_op\_ex
 
-@note Only has an effect with the fixed-function pipeline or the @ref rtss
+@ffp_rtss_only
 @par
 Format: colour\_op\_ex &lt;op&gt; &lt;source1&gt; &lt;source2&gt; \[&lt;manualBlend&gt;\] \[&lt;arg1&gt;\] \[&lt;arg2&gt;\]
 @par
@@ -1175,7 +1188,7 @@ Example: colour\_op\_multipass\_fallback one one\_minus\_dest\_alpha
 
 ## alpha\_op\_ex
 
-@note Only has an effect with the fixed-function pipeline or the @ref rtss
+@ffp_rtss_only
 
 @par
 Format: alpha\_op\_ex &lt;op&gt; &lt;source1&gt; &lt;source2&gt; \[&lt;manualBlend&gt;\] \[&lt;arg1&gt;\] \[&lt;arg2&gt;\]
@@ -1186,7 +1199,7 @@ Format: alpha\_op\_ex &lt;op&gt; &lt;source1&gt; &lt;source2&gt; \[&lt;manualBle
 
 ## env\_map
 
-Turns on/off texture coordinate effect that makes this layer an environment map. @note Only has an effect with the fixed-function pipeline or the @ref rtss
+Turns on/off texture coordinate effect that makes this layer an environment map. @ffp_rtss_only
 @par
 Format: env\_map &lt;off|spherical|planar|cubic\_reflection|cubic\_normal&gt;
 
@@ -1223,7 +1236,7 @@ Format: scroll &lt;u&gt; &lt;v&gt;
 
 @copydetails Ogre::TextureUnitState::setTextureScroll
 
-@note if you’re using a vertex program this will have no effect unless you use the texture\_matrix auto-param.
+@shaderparam
 
 <a name="scroll_005fanim"></a><a name="scroll_005fanim-1"></a>
 
@@ -1235,7 +1248,7 @@ Format: scroll\_anim &lt;uSpeed&gt; &lt;vSpeed&gt;<br>
 
 @copydetails Ogre::TextureUnitState::setScrollAnimation 
 
-@note if you’re using a vertex program this will have no effect unless you use the texture\_matrix auto-param.
+@shaderparam
 <a name="rotate"></a><a name="rotate-1"></a>
 
 ## rotate
@@ -1243,11 +1256,11 @@ Format: scroll\_anim &lt;uSpeed&gt; &lt;vSpeed&gt;<br>
 @copybrief Ogre::TextureUnitState::setTextureRotate
 
 @par
-Format: rotate &lt;angle&gt;
+Format: rotate &lt;angle_in_deg&gt;
 
 @copydetails Ogre::TextureUnitState::setTextureRotate
 
-@note if you’re using a vertex program this will have no effect unless you use the texture\_matrix auto-param.
+@shaderparam
 
 <a name="rotate_005fanim"></a><a name="rotate_005fanim-1"></a>
 
@@ -1260,7 +1273,7 @@ Format: rotate\_anim &lt;speed&gt;
 
 @copydetails Ogre::TextureUnitState::setRotateAnimation 
 
-@note if you’re using a vertex program this will have no effect unless you use the texture\_matrix auto-param.
+@shaderparam
 
 <a name="scale"></a><a name="scale-1"></a>
 
@@ -1274,7 +1287,7 @@ Format: scale &lt;uScale&gt; &lt;vScale&gt;
 @copydetails Ogre::TextureUnitState::setTextureScale
 
 
- @note if you’re using a vertex program this will have no effect unless you use the texture\_matrix auto-param.
+@shaderparam
 
 <a name="wave_005fxform"></a><a name="wave_005fxform-1"></a>
 
@@ -1315,7 +1328,7 @@ Animate the v scale value
 
 waveType is one of Ogre::WaveformType without the `WFT_` prefix. E.g. `WFT_SQUARE` becomes `square`.
 
-@note if you’re using a vertex program this will have no effect unless you use the texture\_matrix auto-param.
+@shaderparam
 
 <a name="transform"></a><a name="transform-1"></a>
 
@@ -1327,7 +1340,7 @@ Format: transform m00 m01 m02 m03 m10 m11 m12 m13 m20 m21 m22 m23 m30 m31 m32 m3
 
 The indexes of the 4x4 matrix value above are expressed as m&lt;row&gt;&lt;col&gt;.
 
- @note if you’re using a vertex program this will have no effect unless you use the texture\_matrix auto-param.
+@shaderparam
 
 <a name="sampler_ref"></a>
 ## sampler_ref
@@ -1431,24 +1444,24 @@ Default: filtering linear linear point
 
 Each parameter can be one of Ogre::FilterOptions without the `FO_` prefix. E.g. `FO_LINEAR` becomes `linear`.
 
-@copydetails Ogre::TextureUnitState::setTextureFiltering(FilterOptions,FilterOptions,FilterOptions)
+@copydetails Ogre::Sampler::setFiltering(FilterOptions,FilterOptions,FilterOptions)
 
 <a name="max_005fanisotropy"></a><a name="max_005fanisotropy-1"></a>
 
 ## max\_anisotropy
 
-@copybrief Ogre::TextureUnitState::setTextureAnisotropy
+@copybrief Ogre::Sampler::setAnisotropy
 
 @par
 Format: max\_anisotropy &lt;maxAniso&gt;<br> Default: max\_anisotropy 1
 
-@copydetails Ogre::TextureUnitState::setTextureAnisotropy
+@copydetails Ogre::Sampler::setAnisotropy
 
 <a name="mipmap_005fbias"></a><a name="mipmap_005fbias-1"></a>
 
 ## mipmap\_bias
 
-@copydetails Ogre::TextureUnitState::setTextureMipmapBias
+@copydetails Ogre::Sampler::setMipmapBias
 
 @par
 Format: mipmap\_bias &lt;value&gt;<br> Default: mipmap\_bias 0
@@ -1474,173 +1487,27 @@ Format: comp_func &lt;func&gt;
 
 @param func one of Ogre::CompareFunction without the `CMPF_` prefix. E.g. `CMPF_LESS_EQUAL` becomes `less_equal`.
 
-# Declaring GPU Programs {#Declaring-Vertex_002fGeometry_002fFragment-Programs}
+# Using GPU Programs in a Pass {#Using-Vertex_002fGeometry_002fFragment-Programs-in-a-Pass}
 
-In order to use a vertex, geometry or fragment program in your materials (See [Using Vertex/Geometry/Fragment Programs in a Pass](@ref Using-Vertex_002fGeometry_002fFragment-Programs-in-a-Pass)), you first have to define them. A single program definition can be used by any number of materials, the only prerequisite is that a program must be defined before being referenced in the pass section of a material.
+Within a pass section of a material script, you can reference a vertex, geometry and / or a fragment program which is been defined in a .program script (See [GPU Program Scripts](@ref Declaring-Vertex_002fGeometry_002fFragment-Programs)). The programs are defined separately from the usage of them in the pass, since the programs are very likely to be reused between many separate materials, probably across many different .material scripts, so this approach lets you define the program only once and use it many times.
 
-The definition of a program can either be embedded in the .material script itself (in which case it must precede any references to it in the script), or if you wish to use the same program across multiple .material files, you can define it in an external .program script. You define the program in exactly the same way whether you use a .program script or a .material script, the only difference is that all .program scripts are guaranteed to have been parsed before **all** .material scripts, so you can guarantee that your program has been defined before any .material script that might use it. Just like .material scripts, .program scripts will be read from any location which is on your resource path, and you can define many programs in a single script.
-
-Vertex, geometry and fragment programs can be low-level (i.e. assembler code written to the specification of a given low level syntax such as vs\_1\_1 or arbfp1) or high-level such as DirectX9 HLSL, Open GL Shader Language, or nVidia’s Cg language (See @ref High-level-Programs). High level languages give you a number of advantages, such as being able to write more intuitive code, and possibly being able to target multiple architectures in a single program (for example, the same Cg program might be able to be used in both D3D and GL, whilst the equivalent low-level programs would require separate techniques, each targeting a different API). High-level programs also allow you to use named parameters instead of simply indexed ones, although parameters are not defined here, they are used in the Pass.
-
-Here is an example of a definition of a low-level vertex program:
+As well as naming the program in question, you can also provide parameters to it. Here’s a simple example:
 
 ```cpp
-vertex_program myVertexProgram asm
+vertex_program_ref myVertexProgram
 {
-    source myVertexProgram.asm 
-    syntax vs_1_1
+    param_indexed_auto 0 worldviewproj_matrix
+    param_indexed      4 float4  10.0 0 0 0
 }
 ```
 
-As you can see, that’s very simple, and defining a fragment or geometry program is exactly the same, just with vertex\_program replaced with fragment\_program or geometry\_program, respectively. You give the program a name in the header, followed by the word ’asm’ to indicate that this is a low-level program. Inside the braces, you specify where the source is going to come from (and this is loaded from any of the resource locations as with other media), and also indicate the syntax being used. You might wonder why the syntax specification is required when many of the assembler syntaxes have a header identifying them anyway - well the reason is that the engine needs to know what syntax the program is in before reading it, because during compilation of the material, we want to skip programs which use an unsupportable syntax quickly, without loading the program first.
+In this example, we bind a vertex program called ’myVertexProgram’ (which will be defined elsewhere) to the pass, and give it 2 parameters, one is an ’auto’ parameter, meaning we do not have to supply a value as such, just a recognised code (in this case it’s the world/view/projection matrix which is kept up to date automatically by Ogre). The second parameter is a manually specified parameter, a 4-element float. The indexes are described later.
 
-The current supported syntaxes are:
+The syntax of the link to a vertex program and a fragment or geometry program are identical, the only difference is that ’fragment\_program\_ref’ and ’geometry\_program\_ref’ are used respectively instead of ’vertex\_program\_ref’.
 
-<dl compact="compact">
-<dt>vs\_1\_1</dt> <dd>
+For many situations vertex, geometry and fragment programs are associated with each other in a pass but this is not cast in stone. You could have a vertex program that can be used by several different fragment programs. Another situation that arises is that you can mix fixed pipeline and programmable pipeline (shaders) together. You could use the non-programmable vertex fixed function pipeline and then provide a fragment\_program\_ref in a pass i.e. there would be no vertex\_program\_ref section in the pass. The fragment program referenced in the pass must meet the requirements as defined in the related API in order to read from the outputs of the vertex fixed pipeline. You could also just have a vertex program that outputs to the fragment fixed function pipeline.
 
-This is one of the DirectX vertex shader assembler syntaxes. <br> Supported on cards from: ATI Radeon 8500, nVidia GeForce 3 <br>
-
-</dd> <dt>vs\_2\_0</dt> <dd>
-
-Another one of the DirectX vertex shader assembler syntaxes. <br> Supported on cards from: ATI Radeon 9600, nVidia GeForce FX 5 series <br>
-
-</dd> <dt>vs\_2\_x</dt> <dd>
-
-Another one of the DirectX vertex shader assembler syntaxes. <br> Supported on cards from: ATI Radeon X series, nVidia GeForce FX 6 series <br>
-
-</dd> <dt>vs\_3\_0</dt> <dd>
-
-Another one of the DirectX vertex shader assembler syntaxes. <br> Supported on cards from: ATI Radeon HD 2000+, nVidia GeForce FX 6 series
-
-</dd> <dt>arbvp1</dt> <dd>
-
-This is the OpenGL standard assembler format for vertex programs. It’s roughly equivalent to DirectX vs\_1\_1.
-
-</dd> <dt>vp20</dt> <dd>
-
-This is an nVidia-specific OpenGL vertex shader syntax which is a superset of vs 1.1. ATI Radeon HD 2000+ also supports it.
-
-</dd> <dt>vp30</dt> <dd>
-
-Another nVidia-specific OpenGL vertex shader syntax. It is a superset of vs 2.0, which is supported on nVidia GeForce FX 5 series and higher. ATI Radeon HD 2000+ also supports it.
-
-</dd> <dt>vp40</dt> <dd>
-
-Another nVidia-specific OpenGL vertex shader syntax. It is a superset of vs 3.0, which is supported on nVidia GeForce FX 6 series and higher.
-
-</dd> <dt>ps\_1\_1, ps\_1\_2, ps\_1\_3</dt> <dd>
-
-DirectX pixel shader (i.e. fragment program) assembler syntax. <br> Supported on cards from: ATI Radeon 8500, nVidia GeForce 3 <br> @note for ATI 8500, 9000, 9100, 9200 hardware, this profile can also be used in OpenGL. The ATI 8500 to 9200 do not support arbfp1 but do support atifs extension in OpenGL which is very similar in function to ps\_1\_4 in DirectX. Ogre has a built in ps\_1\_x to atifs compiler that is automatically invoked when ps\_1\_x is used in OpenGL on ATI hardware.
-
-</dd> <dt>ps\_1\_4</dt> <dd>
-
-DirectX pixel shader (i.e. fragment program) assembler syntax. <br> Supported on cards from: ATI Radeon 8500, nVidia GeForce FX 5 series <br> @note for ATI 8500, 9000, 9100, 9200 hardware, this profile can also be used in OpenGL. The ATI 8500 to 9200 do not support arbfp1 but do support atifs extension in OpenGL which is very similar in function to ps\_1\_4 in DirectX. Ogre has a built in ps\_1\_x to atifs compiler that is automatically invoked when ps\_1\_x is used in OpenGL on ATI hardware.
-
-</dd> <dt>ps\_2\_0</dt> <dd>
-
-DirectX pixel shader (i.e. fragment program) assembler syntax. <br> Supported cards: ATI Radeon 9600, nVidia GeForce FX 5 series<br>
-
-</dd> <dt>ps\_2\_x</dt> <dd>
-
-DirectX pixel shader (i.e. fragment program) assembler syntax. This is basically ps\_2\_0 with a higher number of instructions. <br> Supported cards: ATI Radeon X series, nVidia GeForce FX 6 series<br>
-
-</dd> <dt>ps\_3\_0</dt> <dd>
-
-DirectX pixel shader (i.e. fragment program) assembler syntax. <br> Supported cards: ATI Radeon HD 2000+, nVidia GeForce FX6 series<br>
-
-</dd> <dt>ps\_3\_x</dt> <dd>
-
-DirectX pixel shader (i.e. fragment program) assembler syntax. <br> Supported cards: nVidia GeForce FX7 series<br>
-
-</dd> <dt>arbfp1</dt> <dd>
-
-This is the OpenGL standard assembler format for fragment programs. It’s roughly equivalent to ps\_2\_0, which means that not all cards that support basic pixel shaders under DirectX support arbfp1 (for example neither the GeForce3 or GeForce4 support arbfp1, but they do support ps\_1\_1).
-
-</dd> <dt>fp20</dt> <dd>
-
-This is an nVidia-specific OpenGL fragment syntax which is a superset of ps 1.3. It allows you to use the ’nvparse’ format for basic fragment programs. It actually uses NV\_texture\_shader and NV\_register\_combiners to provide functionality equivalent to DirectX’s ps\_1\_1 under GL, but only for nVidia cards. However, since ATI cards adopted arbfp1 a little earlier than nVidia, it is mainly nVidia cards like the GeForce3 and GeForce4 that this will be useful for. You can find more information about nvparse at http://developer.nvidia.com/object/nvparse.html.
-
-</dd> <dt>fp30</dt> <dd>
-
-Another nVidia-specific OpenGL fragment shader syntax. It is a superset of ps 2.0, which is supported on nVidia GeForce FX 5 series and higher. ATI Radeon HD 2000+ also supports it.
-
-</dd> <dt>fp40</dt> <dd>
-
-Another nVidia-specific OpenGL fragment shader syntax. It is a superset of ps 3.0, which is supported on nVidia GeForce FX 6 series and higher.
-
-</dd> <dt>gpu\_gp, gp4\_gp</dt> <dd>
-
-An nVidia-specific OpenGL geometry shader syntax. <br> Supported cards: nVidia GeForce FX8 series<br>
-
-</dd> <dt>glsles</dt> <dd>
-
-OpenGL Shading Language for Embedded Systems. It is a variant of GLSL, streamlined for low power devices. Supported cards: PowerVR SGX series
-
-</dd> </dl>
-
-You can get a definitive list of the syntaxes supported by the current card by calling GpuProgramManager::getSingleton().getSupportedSyntax().
-
-# Specifying Named Constants for Assembler Shaders {#Specifying-Named-Constants-for-Assembler-Shaders}
-
-Assembler shaders don’t have named constants (also called uniform parameters) because the language does not support them - however if you for example decided to precompile your shaders from a high-level language down to assembler for performance or obscurity, you might still want to use the named parameters. Well, you actually can - GpuNamedConstants which contains the named parameter mappings has a ’save’ method which you can use to write this data to disk, where you can reference it later using the manual\_named\_constants directive inside your assembler program declaration, e.g.
-
-```cpp
-vertex_program myVertexProgram asm
-{
-    source myVertexProgram.asm 
-    syntax vs_1_1
-    manual_named_constants myVertexProgram.constants
-}
-```
-
-In this case myVertexProgram.constants has been created by calling highLevelGpuProgram-&gt;getNamedConstants().save("myVertexProgram.constants"); sometime earlier as preparation, from the original high-level program. Once you’ve used this directive, you can use named parameters here even though the assembler program itself has no knowledge of them.
-
-# Default Program Parameters {#Default-Program-Parameters}
-
-While defining a vertex, geometry or fragment program, you can also specify the default parameters to be used for materials which use it, unless they specifically override them. You do this by including a nested ’default\_params’ section, like so:
-
-```cpp
-vertex_program Ogre/CelShadingVP cg
-{
-    source Example_CelShading.cg
-    entry_point main_vp
-    profiles vs_1_1 arbvp1
-
-    default_params
-    {
-        param_named_auto lightPosition light_position_object_space 0
-        param_named_auto eyePosition camera_position_object_space
-        param_named_auto worldViewProj worldviewproj_matrix
-        param_named shininess float 10 
-    }
-}
-```
-
-The syntax of the parameter definition is exactly the same as when you define parameters when using programs, See @ref Program-Parameter-Specification. Defining default parameters allows you to avoid rebinding common parameters repeatedly (clearly in the above example, all but ’shininess’ are unlikely to change between uses of the program) which makes your material declarations shorter.
-
-# Declaring Shared Parameters {#Declaring-Shared-Parameters}
-
-Often, not every parameter you want to pass to a shader is unique to that program, and perhaps you want to give the same value to a number of different programs, and a number of different materials using that program. Shared parameter sets allow you to define a ’holding area’ for shared parameters that can then be referenced when you need them in particular shaders, while keeping the definition of that value in one place. To define a set of shared parameters, you do this:
-
-```cpp
-shared_params YourSharedParamsName
-{
-    shared_param_named mySharedParam1 float4 0.1 0.2 0.3 0.4
-    ...
-}
-```
-
-As you can see, you need to use the keyword ’shared\_params’ and follow it with the name that you will use to identify these shared parameters. Inside the curly braces, you can define one parameter per line, in a way which is very similar to the [param\_named](#param_005fnamed) syntax. The definition of these lines is: 
-@par
-Format: shared\_param\_name &lt;param\_name&gt; &lt;param\_type&gt; \[&lt;\[array\_size\]&gt;\] \[&lt;initial\_values&gt;\]
-
-@param param_name must be unique within the set
-@param param_type can be any one of float, float2, float3, float4, int, int2, int3, int4, matrix2x2, matrix2x3, matrix2x4, matrix3x2, matrix3x3, matrix3x4, matrix4x2, matrix4x3 and matrix4x4. 
-@param array_size allows you to define arrays of param\_type should you wish, and if present must be a number enclosed in square brackets (and note, must be separated from the param\_type with whitespace). 
-@param initial_values If you wish, you can also initialise the parameters by providing a list of values.
-
-Once you have defined the shared parameters, you can reference them inside default\_params and params blocks using [shared\_params\_ref](#shared_005fparams_005fref). You can also obtain a reference to them in your code via GpuProgramManager::getSharedParameters, and update the values for all instances using them.
+The requirements to read from or write to the fixed function pipeline are similar between rendering API’s (DirectX and OpenGL) but how its actually done in each type of shader (vertex, geometry or fragment) depends on the shader language. For HLSL (DirectX API) and associated asm consult MSDN at <http://msdn.microsoft.com/library/>. For GLSL (OpenGL), consult section 7.6 of the GLSL spec 1.1 available at <http://www.opengl.org/registry/>. The built in varying variables provided in GLSL allow your program to read/write to the fixed function pipeline varyings. For Cg consult the Language Profiles section in CgUsersManual.pdf that comes with the Cg Toolkit available at <https://developer.nvidia.com/cg-toolkit>. For HLSL and Cg its the varying bindings that allow your shader programs to read/write to the fixed function pipeline varyings.
 
 # Adding new Techniques, Passes, to copied materials {#Adding-new-Techniques_002c-Passes_002c-to-copied-materials_003a}
 
@@ -1667,168 +1534,3 @@ material BumpMap2 : BumpMap1
   }
 }
 ```
-
-# Texture Aliases {#Texture-Aliases}
-
-Texture aliases are useful for when only the textures used in texture units need to be specified for a cloned material. In the source material i.e. the original material to be cloned, each texture unit can be given a texture alias name. The cloned material in the script can then specify what textures should be used for each texture alias. Note that texture aliases are a more specific version of [Script Variables](#Script-Variables) which can be used to easily set other values.
-
-Using texture aliases within texture units:
-@par
-Format: texture\_alias &lt;name&gt;
-@par
-Default: &lt;name&gt; will default to texture\_unit &lt;name&gt; if set
-
-```cpp
-texture_unit DiffuseTex
-{
-  texture diffuse.jpg
-}
-```
-
-texture\_alias defaults to DiffuseTex.<br>
-
-Example: The base material to be cloned:<br>
-
-```cpp
-material TSNormalSpecMapping
-{
-  technique GLSL
-  {
-    pass 
-    {
-      ambient 0.1 0.1 0.1
-      diffuse 0.7 0.7 0.7
-      specular 0.7 0.7 0.7 128
-        
-      vertex_program_ref GLSLDemo/OffsetMappingVS
-      {
-        param_named_auto lightPosition light_position_object_space 0
-        param_named_auto eyePosition camera_position_object_space
-        param_named textureScale float 1.0
-      }
-
-      fragment_program_ref GLSLDemo/TSNormalSpecMappingFS 
-      {
-        param_named normalMap int 0
-        param_named diffuseMap int 1
-        param_named fxMap int 2
-      }
-
-      // Normal map
-      texture_unit NormalMap
-      {
-        texture defaultNM.png
-        tex_coord_set 0
-        filtering trilinear
-      }
-
-      // Base diffuse texture map
-      texture_unit DiffuseMap
-      {
-        texture defaultDiff.png
-        filtering trilinear
-        tex_coord_set 1
-      }
-
-      // spec map for shininess
-      texture_unit SpecMap
-      {
-        texture defaultSpec.png
-        filtering trilinear
-        tex_coord_set 2
-      }
-
-    }
-  }
-
-  technique HLSL_DX9
-  {
-    pass 
-    {
-            
-      vertex_program_ref FxMap_HLSL_VS
-      {
-        param_named_auto worldViewProj_matrix worldviewproj_matrix 
-        param_named_auto lightPosition light_position_object_space 0
-        param_named_auto eyePosition camera_position_object_space
-      }
-
-      fragment_program_ref FxMap_HLSL_PS 
-      {
-        param_named ambientColor float4 0.2 0.2 0.2 0.2
-      }
-
-      // Normal map
-      texture_unit 
-      {
-        texture_alias NormalMap
-        texture defaultNM.png
-        tex_coord_set 0
-        filtering trilinear
-      }
-
-      // Base diffuse texture map
-      texture_unit 
-      {
-        texture_alias DiffuseMap
-        texture defaultDiff.png
-        filtering trilinear
-        tex_coord_set 1
-      }
-
-      // spec map for shininess
-      texture_unit
-      {
-        texture_alias SpecMap
-        texture defaultSpec.png
-        filtering trilinear
-        tex_coord_set 2
-      }
-
-    }
-  }
-}
-```
-
-Note that the GLSL and HLSL techniques use the same textures. For each texture usage type a texture alias is given that describes what the texture is used for. So the first texture unit in the GLSL technique has the same alias as the TUS in the HLSL technique since its the same texture used. Same goes for the second and third texture units.<br> For demonstration purposes, the GLSL technique makes use of texture\_unit naming and therefore the texture\_alias name does not have to be set since it defaults to the texture unit name. So why not use the default all the time since its less typing? For most situations you can. Its when you clone a material that and then want to change the alias that you must use the texture\_alias command in the script. You cannot change the name of a texture\_unit in a cloned material so texture\_alias provides a facility to assign an alias name.
-
-Now we want to clone the material but only want to change the textures used. We could copy and paste the whole material but if we decide to change the base material later then we also have to update the copied material in the script. With set\_texture\_alias, copying a material is very easy now. set\_texture\_alias is specified at the top of the material definition. All techniques using the specified texture alias will be effected by set\_texture\_alias.
-
-@par
-Format: set\_texture\_alias &lt;alias name&gt; &lt;texture name&gt;<br>
-
-```cpp
-material fxTest : TSNormalSpecMapping
-{
-  set_texture_alias NormalMap fxTestNMap.png
-  set_texture_alias DiffuseMap fxTestDiff.png
-  set_texture_alias SpecMap fxTestMap.png
-}
-```
-
-The textures in both techniques in the child material will automatically get replaced with the new ones we want to use.
-
-The same process can be done in code as long you set up the texture alias names so then there is no need to traverse technique/pass/TUS to change a texture. You just call myMaterialPtr-&gt;applyTextureAliases(myAliasTextureNameList) which will update all textures in all texture units that match the alias names in the map container reference you passed as a parameter.
-
-You don’t have to supply all the textures in the copied material.<br>
-
-```cpp
-material fxTest2 : fxTest
-{
-  set_texture_alias DiffuseMap fxTest2Diff.png
-  set_texture_alias SpecMap fxTest2Map.png
-}
-```
-
-Material fxTest2 only changes the diffuse and spec maps of material fxTest and uses the same normal map.
-
-Another example:
-
-```cpp
-material fxTest3 : TSNormalSpecMapping
-{
-  set_texture_alias DiffuseMap fxTest2Diff.png
-}
-```
-
-fxTest3 will end up with the default textures for the normal map and spec map setup in TSNormalSpecMapping material but will have a different diffuse map. So your base material can define the default textures to use and then the child materials can override specific textures.

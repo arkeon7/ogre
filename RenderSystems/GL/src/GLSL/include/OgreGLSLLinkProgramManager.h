@@ -42,14 +42,8 @@ namespace Ogre {
     {
 
     private:
-        /// active objects defining the active rendering gpu state
-        GLSLProgram* mActiveVertexGpuProgram;
-        GLSLProgram* mActiveGeometryGpuProgram;
-        GLSLProgram* mActiveFragmentGpuProgram;
         GLSLLinkProgram* mActiveLinkProgram;
 
-        /// Use type to complete other information
-        void convertGLUniformtoOgreType(GLenum gltype, GpuConstantDefinition& defToUpdate);
         /// Find where the data for a specific uniform should come from, populate
         static bool completeParamSource(const String& paramName,
             const GpuConstantDefinitionMap* vertexConstantDefs, 
@@ -72,17 +66,7 @@ namespace Ogre {
             The active program object will be cleared.
             Normally called from the GLSLGpuProgram::bindProgram and unbindProgram methods
         */
-        void setActiveFragmentShader(GLSLProgram* fragmentGpuProgram);
-        /** Set the active geometry shader for the next rendering state.
-            The active program object will be cleared.
-            Normally called from the GLSLGpuProgram::bindProgram and unbindProgram methods
-        */
-        void setActiveGeometryShader(GLSLProgram* geometryGpuProgram);
-        /** Set the active vertex shader for the next rendering state.
-            The active program object will be cleared.
-            Normally called from the GLSLGpuProgram::bindProgram and unbindProgram methods
-        */
-        void setActiveVertexShader(GLSLProgram* vertexGpuProgram);
+        void setActiveShader(GpuProgramType type, GLSLProgram* gpuProgram);
 
         /** Populate a list of uniforms based on a program object.
         @param programObject Handle to the program object to query

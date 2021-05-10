@@ -154,14 +154,14 @@ namespace Ogre {
         @param stream The DataStream holding the .mesh data. Must be initialised (pos at the start of the buffer).
         @param pDest Pointer to the Mesh object which will receive the data. Should be blank already.
         */
-        void importMesh(DataStreamPtr& stream, Mesh* pDest);
+        void importMesh(const DataStreamPtr& stream, Mesh* pDest);
 
         /// Sets the listener for this serializer
         void setListener(MeshSerializerListener *listener);
         /// Returns the current listener
         MeshSerializerListener *getListener();
         
-    protected:
+    private:
         typedef std::vector<MeshVersionData*> MeshVersionDataList;
         MeshVersionDataList mVersionData;
 

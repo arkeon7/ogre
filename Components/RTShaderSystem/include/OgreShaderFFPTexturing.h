@@ -70,11 +70,6 @@ public:
     virtual int getExecutionOrder() const;
 
     /** 
-    @see SubRenderState::updateGpuProgramsParams.
-    */
-    virtual void updateGpuProgramsParams(Renderable* rend, Pass* pass, const AutoParamDataSource* source, const LightList* pLightList);
-
-    /** 
     @see SubRenderState::copyFrom.
     */
     virtual void copyFrom(const SubRenderState& rhs);
@@ -94,8 +89,6 @@ protected:
     {
         // Texture unit state.
         TextureUnitState* mTextureUnitState;
-        // Texture projector.
-        const Frustum* mTextureProjector;
         // Texture sampler index.
         unsigned short mTextureSamplerIndex;
         // Texture sampler index.
@@ -187,13 +180,12 @@ protected:
     virtual void addPSSampleTexelInvocation(TextureUnitParams* textureUnitParams, Function* psMain, 
         const ParameterPtr& texel, int groupOrder);
 
-    virtual void addPSArgumentInvocations(Function* psMain, ParameterPtr arg, ParameterPtr texel,
-                int samplerIndex, LayerBlendSource blendSrc, const ColourValue& colourValue, Real alphaValue,
-                 bool isAlphaArgument, const int groupOrder);
+    ParameterPtr getPSArgument(ParameterPtr texel, LayerBlendSource blendSrc, const ColourValue& colourValue,
+                               Real alphaValue, bool isAlphaArgument) const;
 
     virtual void addPSBlendInvocations(Function* psMain, ParameterPtr arg1, ParameterPtr arg2,
                 ParameterPtr texel,int samplerIndex, const LayerBlendModeEx& blendMode,
-                const int groupOrder, int targetChannels);
+                const int groupOrder, Operand::OpMask targetChannels);
     
     /** 
     Determines the texture coordinates calculation method of the given texture unit state.

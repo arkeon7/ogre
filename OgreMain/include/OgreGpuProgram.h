@@ -33,7 +33,7 @@ THE SOFTWARE.
 #include "OgreResource.h"
 #include "OgreGpuProgramParams.h"
 #include "OgreHeaderPrefix.h"
-#include "OgreVector3.h"
+#include "OgreVector.h"
 #include "OgreSharedPtr.h"
 
 namespace Ogre {
@@ -70,108 +70,35 @@ namespace Ogre {
     class _OgreExport GpuProgram : public Resource
     {
     protected:
-        /// Command object - see ParamCommand
-        class _OgreExport CmdType : public ParamCommand
-    {
-    public:
-        String doGet(const void* target) const;
-        void doSet(void* target, const String& val);
-    };
-    class _OgreExport CmdSyntax : public ParamCommand
-    {
-    public:
-        String doGet(const void* target) const;
-        void doSet(void* target, const String& val);
-    };
-    class _OgreExport CmdSkeletal : public ParamCommand
-    {
-    public:
-        String doGet(const void* target) const;
-        void doSet(void* target, const String& val);
-    };
-    class _OgreExport CmdMorph : public ParamCommand
-    {
-    public:
-        String doGet(const void* target) const;
-        void doSet(void* target, const String& val);
-    };
-    class _OgreExport CmdPose : public ParamCommand
-    {
-    public:
-        String doGet(const void* target) const;
-        void doSet(void* target, const String& val);
-    };
-    class _OgreExport CmdVTF : public ParamCommand
-    {
-    public:
-        String doGet(const void* target) const;
-        void doSet(void* target, const String& val);
-    };
-    class _OgreExport CmdManualNamedConstsFile : public ParamCommand
-    {
-    public:
-        String doGet(const void* target) const;
-        void doSet(void* target, const String& val);
-    };
-    class _OgreExport CmdAdjacency : public ParamCommand
-    {
-    public:
-        String doGet(const void* target) const;
-        void doSet(void* target, const String& val);
-    };
-    class _OgreExport CmdComputeGroupDims : public ParamCommand
-    {
-    public:
-        String doGet(const void* target) const;
-        void doSet(void* target, const String& val);
-    };
-    // Command object for setting / getting parameters
-    static CmdType msTypeCmd;
-    static CmdSyntax msSyntaxCmd;
-    static CmdSkeletal msSkeletalCmd;
-    static CmdMorph msMorphCmd;
-    static CmdPose msPoseCmd;
-    static CmdVTF msVTFCmd;
-    static CmdManualNamedConstsFile msManNamedConstsFileCmd;
-    static CmdAdjacency msAdjacencyCmd;
-    static CmdComputeGroupDims msComputeGroupDimsCmd;
-    /// The type of the program
-    GpuProgramType mType;
     /// The name of the file to load source from (may be blank)
     String mFilename;
     /// The assembler source of the program (may be blank until file loaded)
     String mSource;
-    /// Whether we need to load source from file or not
-    bool mLoadFromFile;
     /// Syntax code e.g. arbvp1, vs_2_0 etc
     String mSyntaxCode;
+    /// The type of the program
+    GpuProgramType mType;
+    /// Whether we need to load source from file or not
+    bool mLoadFromFile;
     /// Does this (vertex) program include skeletal animation?
     bool mSkeletalAnimation;
     /// Does this (vertex) program include morph animation?
     bool mMorphAnimation;
-    /// Does this (vertex) program include pose animation (count of number of poses supported)
-    ushort mPoseAnimation;
     /// Does this (vertex) program require support for vertex texture fetch?
     bool mVertexTextureFetch;
     /// Does this (geometry) program require adjacency information?
     bool mNeedsAdjacencyInfo;
-    /// The number of process groups dispatched by this (compute) program.
-    Vector3 mComputeGroupDimensions;
-    /// The default parameters for use with this object
-    GpuProgramParametersSharedPtr mDefaultParams;
     /// Did we encounter a compilation error?
     bool mCompileError;
+    /// Does this (vertex) program include pose animation (count of number of poses supported)
+    ushort mPoseAnimation;
+    /// The default parameters for use with this object
+    GpuProgramParametersSharedPtr mDefaultParams;
     /** Record of logical to physical buffer maps. Mandatory for low-level
         programs or high-level programs which set their params the same way.
         This is a shared pointer because if the program is recompiled and the parameters
         change, this definition will alter, but previous params may reference the old def. */
-    mutable GpuLogicalBufferStructPtr mFloatLogicalToPhysical;
-    /// @copydoc mFloatLogicalToPhysical
-    mutable GpuLogicalBufferStructPtr mDoubleLogicalToPhysical;
-    /// @copydoc mFloatLogicalToPhysical
-    mutable GpuLogicalBufferStructPtr mIntLogicalToPhysical;
-    /// static nullPtr
-    static GpuLogicalBufferStructPtr mBoolLogicalToPhysical;
+    mutable GpuLogicalBufferStructPtr mLogicalToPhysical;
     /** Parameter name -> ConstantDefinition map, shared instance used by all parameter objects.
         This is a shared pointer because if the program is recompiled and the parameters
         change, this definition will alter, but previous params may reference the old def.
@@ -190,14 +117,20 @@ namespace Ogre {
         @par
         The subclass must have called it's own createParamDictionary before calling this method.
     */
-    void setupBaseParamDictionary(void);
+    virtual void setupBaseParamDictionary(void);
 
     /** Internal method returns whether required capabilities for this program is supported.
      */
     bool isRequiredCapabilitiesSupported(void) const;
 
-    /// @copydoc Resource::loadImpl
+    // catches errors during prepare
+    void safePrepare();
+
+    void prepareImpl();
+
     void loadImpl(void);
+
+    void postLoadImpl();
 
     /// Create the internal params logical & named mapping structures
     void createParameterMappingStructures(bool recreateIfExists = true) const;
@@ -236,7 +169,7 @@ namespace Ogre {
     /** Gets the name of the file used as source for this program. */
     const String& getSourceFile(void) const { return mFilename; }
     /** Gets the assembler source for this program. */
-    const String& getSource(void) const { return mSource; }
+    virtual const String& getSource(void) const { return mSource; }
     /// Set the program type (only valid before load)
     void setType(GpuProgramType t);
     /// Get the program type
@@ -324,18 +257,10 @@ namespace Ogre {
     */
     virtual bool isVertexTextureFetchRequired(void) const { return mVertexTextureFetch; }
 
-    /// @deprecated
-    virtual void setAdjacencyInfoRequired(bool r) { mNeedsAdjacencyInfo = r; }
-    /// @deprecated
+    /// @deprecated use OT_DETAIL_ADJACENCY_BIT
+    OGRE_DEPRECATED virtual void setAdjacencyInfoRequired(bool r) { mNeedsAdjacencyInfo = r; }
+    /// @deprecated use OT_DETAIL_ADJACENCY_BIT
     virtual bool isAdjacencyInfoRequired(void) const { return mNeedsAdjacencyInfo; }
-    /** Sets the number of process groups dispatched by this compute
-        program.
-     */
-    virtual void setComputeGroupDimensions(Vector3 dimensions) { mComputeGroupDimensions = dimensions; }
-    /** Returns the number of process groups dispatched by this compute 
-        program.
-     */
-    virtual Vector3 getComputeGroupDimensions(void) const { return mComputeGroupDimensions; }
 
     /** Get a reference to the default parameters which are to be used for all
         uses of this program.
@@ -347,7 +272,7 @@ namespace Ogre {
         the default parameters; thus users of the program need only change the parameters
         which are unique to their own usage of the program.
     */
-    virtual GpuProgramParametersSharedPtr getDefaultParameters(void);
+    virtual const GpuProgramParametersPtr& getDefaultParameters(void);
 
     /** Returns true if default parameters have been set up.
      */
@@ -426,8 +351,7 @@ namespace Ogre {
     */
     virtual const GpuNamedConstants& getConstantDefinitions() const { return *mConstantDefs.get(); }
 
-    /// @copydoc Resource::calculateSize
-    virtual size_t calculateSize(void) const;
+    size_t calculateSize(void) const override;
 
     /// internal method to get the microcode cache id
     uint32 _getHash(uint32 seed = 0) const;
@@ -437,6 +361,8 @@ namespace Ogre {
     virtual void loadFromSource(void) = 0;
 
     };
+
+    inline String to_string(const GpuProgramType& v) { return GpuProgram::getProgramTypeName(v); }
     /** @} */
     /** @} */
 }

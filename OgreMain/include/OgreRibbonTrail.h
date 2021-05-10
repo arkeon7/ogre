@@ -170,10 +170,9 @@ namespace Ogre {
         /// Perform any fading / width delta required; internal method
         virtual void _timeUpdate(Real time);
 
-        /** Overridden from MovableObject */
-        const String& getMovableType(void) const;
+        const String& getMovableType(void) const override;
 
-    protected:
+    private:
         /// List of nodes being trailed
         NodeList mNodeList;
         /// Mapping of nodes to chain segments
@@ -233,8 +232,6 @@ namespace Ogre {
         static String FACTORY_TYPE_NAME;
 
         const String& getType(void) const;
-        void destroyInstance( MovableObject* obj);  
-
     };
     /** @} */
     /** @} */

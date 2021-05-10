@@ -52,18 +52,12 @@ namespace Ogre {
     class _OgreGLES2Export GLSLESProgramManager : public GLSLProgramManagerCommon, public Singleton<GLSLESProgramManager>
     {
     protected:
-        /// Active shaders defining the program
-        GLSLESProgram* mActiveVertexGpuProgram;
-        GLSLESProgram* mActiveFragmentGpuProgram;
-
         /// Active object defining the active rendering gpu state
         GLSLESProgramCommon* mActiveProgram;
 
 #if !OGRE_NO_GLES2_GLSL_OPTIMISER
         struct glslopt_ctx *mGLSLOptimiserContext;
 #endif
-        /// Use type to complete other information
-        void convertGLUniformtoOgreType(GLenum gltype, GpuConstantDefinition& defToUpdate);
         /// Find where the data for a specific uniform should come from, populate
         static bool completeParamSource(const String& paramName,
             const GpuConstantDefinitionMap* vertexConstantDefs, 
@@ -78,20 +72,13 @@ namespace Ogre {
             The active program object will be cleared.
             Normally called from the GLSLESGpuProgram::bindProgram and unbindProgram methods
         */
-        void setActiveFragmentShader(GLSLESProgram* fragmentGpuProgram);
-        /// @copydoc setActiveFragmentShader
-        void setActiveVertexShader(GLSLESProgram* vertexGpuProgram);
+        void setActiveShader(GpuProgramType type, GLSLESProgram* fragmentGpuProgram);
 
         /**
             Get the program object that links the two active shader objects together
             if a program object was not already created and linked a new one is created and linked
         */
         GLSLESProgramCommon* getActiveProgram(void);
-
-        /**
-            Get the linker program by a gpu program
-        */
-        GLSLESProgramCommon* getByProgram(GLSLESProgram* gpuProgram);
 
         /**
             Destroy and remove the linker program from the local cache
@@ -117,9 +104,9 @@ namespace Ogre {
         it yourself before calling this if that's what you want).
         */
         static void extractUniforms(GLuint programObject,
-            const GpuConstantDefinitionMap* vertexConstantDefs, 
-            const GpuConstantDefinitionMap* fragmentConstantDefs,
-            GLUniformReferenceList& list, GLUniformBufferList& sharedList);
+                                    const GpuConstantDefinitionMap* vertexConstantDefs,
+                                    const GpuConstantDefinitionMap* fragmentConstantDefs,
+                                    GLUniformReferenceList& list);
 
         static GLSLESProgramManager& getSingleton(void);
         static GLSLESProgramManager* getSingletonPtr(void);

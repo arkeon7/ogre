@@ -30,6 +30,7 @@
 
 #include "OgreBitesPrerequisites.h"
 #include "OgreBuildSettings.h"
+#include "OgreComponents.h"
 #include "OgreLogManager.h"
 #include "OgrePlugin.h"
 #include "OgreFileSystemLayer.h"
@@ -53,13 +54,6 @@ namespace Ogre {
 
 #include "OgreInput.h"
 
-/** \addtogroup Optional Optional Components
-*  @{
-*/
-/** \defgroup Bites Bites
-* reusable utilities for rapid prototyping
-*  @{
-*/
 namespace OgreBites
 {
 #if OGRE_PLATFORM == OGRE_PLATFORM_ANDROID
@@ -67,6 +61,14 @@ namespace OgreBites
 #else
     typedef SDL_Window NativeWindowType;
 #endif
+
+    /** \addtogroup Optional Optional Components
+    *  @{
+    */
+    /** \defgroup Bites Bites
+    * reusable utilities for rapid prototyping
+    *  @{
+    */
 
     /**
      * link between a renderwindow and a platform specific window
@@ -84,7 +86,7 @@ namespace OgreBites
     class _OgreBitesExport ApplicationContextBase : public Ogre::FrameListener
     {
     public:
-        explicit ApplicationContextBase(const Ogre::String& appName = OGRE_VERSION_NAME);
+        explicit ApplicationContextBase(const Ogre::String& appName = "Ogre3D");
 
         virtual ~ApplicationContextBase();
 
@@ -146,7 +148,7 @@ namespace OgreBites
          *
          * by default all shaders are generated to system memory.
          * Must be called before loadResources
-         * @param write
+         * @param write Whether to write out the generated shaders
          */
         void setRTSSWriteShadersToDisk(bool write);
 
@@ -254,8 +256,6 @@ namespace OgreBites
             removeInputListener(mWindows[0].native, lis);
         }
 
-        void parseWindowOptions(uint32_t& w, uint32_t& h, Ogre::NameValuePairList& miscParams);
-
         /**
          * Create a new render window
          *
@@ -267,6 +267,9 @@ namespace OgreBites
         virtual NativeWindowPair
         createWindow(const Ogre::String& name, uint32_t w = 0, uint32_t h = 0,
                      Ogre::NameValuePairList miscParams = Ogre::NameValuePairList());
+
+        /// destroy and erase an NativeWindowPair by name
+        void destroyWindow(const Ogre::String& name);
 
         /**
          * get the FileSystemLayer instace pointing to an application specific directory
@@ -280,6 +283,9 @@ namespace OgreBites
          */
         static Ogre::String getDefaultMediaDir();
     protected:
+        /// internal method to destroy both the render and the native window
+        virtual void _destroyWindow(const NativeWindowPair& win);
+
         Ogre::OverlaySystem* mOverlaySystem;  // Overlay system
 
         Ogre::FileSystemLayer* mFSLayer; // File system abstraction layer
@@ -298,10 +304,10 @@ namespace OgreBites
 #ifdef OGRE_BUILD_COMPONENT_RTSHADERSYSTEM
         Ogre::RTShader::ShaderGenerator*       mShaderGenerator; // The Shader generator instance.
         SGTechniqueResolverListener*       mMaterialMgrListener; // Shader generator material manager listener.
-        Ogre::String                           mRTShaderLibPath;
 #endif // INCLUDE_RTSHADER_SYSTEM
     };
+
+    /** @} */
+    /** @} */
 }
-/** @} */
-/** @} */
 #endif

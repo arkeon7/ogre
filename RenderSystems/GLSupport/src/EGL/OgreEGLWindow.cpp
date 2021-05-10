@@ -36,30 +36,18 @@ THE SOFTWARE.
 #include "OgreEGLWindow.h"
 #include "OgreEGLContext.h"
 
-#include <iostream>
-#include <algorithm>
-#include <climits>
+#include <EGL/eglext.h>
 
 namespace Ogre {
     EGLWindow::EGLWindow(EGLSupport *glsupport)
-        : mGLSupport(glsupport),
-          mContext(0),
+        : GLWindow(), mGLSupport(glsupport),
           mWindow(0),
-          mNativeDisplay(0),
+          mNativeDisplay(EGL_DEFAULT_DISPLAY),
           mEglDisplay(EGL_NO_DISPLAY),
           mEglConfig(0),
           mEglSurface(0)
     {
-        mIsTopLevel = false;
-        mIsFullScreen = false;
-        mIsExternal = false;
-        mIsExternalGLControl = false;
-        mClosed = false;
         mActive = true;//todo
-        mIsExternalGLControl = false;
-        mVisible = false;
-        mVSync = false;
-        mVSyncInterval = 1;
     }
 
     EGLWindow::~EGLWindow()
@@ -125,23 +113,6 @@ namespace Ogre {
         }
     }
 
-    bool EGLWindow::isClosed() const
-    {
-        return mClosed;
-    }
-
-    bool EGLWindow::isVisible() const
-    {
-        return mVisible;
-    }
-
-    void EGLWindow::setVisible(bool visible)
-    {
-        mVisible = visible;
-    }
-
-  
-
     void EGLWindow::swapBuffers()
     {
         if (mClosed || mIsExternalGLControl)
@@ -170,7 +141,7 @@ namespace Ogre {
         }
         else if (name == "GLCONTEXT")
         {
-            *static_cast<EGLContext**>(pData) = mContext;
+            *static_cast<GLContext**>(pData) = mContext;
             return;
         } 
         else if (name == "WINDOW")
@@ -185,30 +156,75 @@ namespace Ogre {
         return mGLSupport->getContextProfile() == GLNativeSupport::CONTEXT_ES ? PF_BYTE_RGBA : PF_BYTE_RGB;
     }
 
-    void EGLWindow::copyContentsToMemory(const Box& src, const PixelBox &dst, FrameBuffer buffer)
+    void EGLWindow::create(const String& name, unsigned int width, unsigned int height, bool fullScreen,
+                           const NameValuePairList* miscParams)
     {
-        if(src.right > mWidth || src.bottom > mHeight || src.front != 0 || src.back != 1
-        || dst.getWidth() != src.getWidth() || dst.getHeight() != src.getHeight() || dst.getDepth() != 1)
+#if OGRE_PLATFORM != OGRE_PLATFORM_EMSCRIPTEN
+        int samples = 0;
+
+        if (miscParams)
         {
-            OGRE_EXCEPT(Exception::ERR_INVALIDPARAMS, "Invalid box.", "EGLWindow::copyContentsToMemory");
+            NameValuePairList::const_iterator opt;
+            if ((opt = miscParams->find("FSAA")) != miscParams->end())
+            {
+                samples = StringConverter::parseUnsignedInt(opt->second);
+            }
         }
 
-        if (buffer == FB_AUTO)
-        {
-            buffer = mIsFullScreen? FB_FRONT : FB_BACK;
-        }
+        int minAttribs[] = {
+            EGL_SURFACE_TYPE, EGL_PBUFFER_BIT,
+            EGL_BLUE_SIZE, 5,
+            EGL_GREEN_SIZE, 6,
+            EGL_RED_SIZE, 5,
+            EGL_DEPTH_SIZE, 16,
+            EGL_NONE
+        };
 
-        static_cast<GLRenderSystemCommon*>(Root::getSingleton().getRenderSystem())
-                ->_copyContentsToMemory(getViewport(0), src, dst, buffer);
+        int maxAttribs[] = {
+            EGL_RED_SIZE,       8,
+            EGL_GREEN_SIZE,     8,
+            EGL_BLUE_SIZE,      8,
+            EGL_DEPTH_SIZE,     24,
+            EGL_ALPHA_SIZE,     8,
+            EGL_STENCIL_SIZE,   8,
+            EGL_SAMPLE_BUFFERS, 1,
+            EGL_SAMPLES, samples,
+            EGL_NONE
+        };
+
+        mEglConfig = mGLSupport->selectGLConfig(minAttribs, maxAttribs);
+        mEglDisplay = mGLSupport->getGLDisplay();
+
+        int pbufferAttribs[] = {
+                EGL_WIDTH, int(width),
+                EGL_HEIGHT, int(height),
+                EGL_NONE,
+        };
+
+        mEglSurface = eglCreatePbufferSurface(mEglDisplay, mEglConfig, pbufferAttribs);
+        mContext = createEGLContext(NULL);
+        mIsExternalGLControl = true; // dont want swapBuffers
+        mName = name;
+        mWidth = width;
+        mHeight = height;
+
+        finaliseWindow();
+#endif
     }
-
 
     ::EGLSurface EGLWindow::createSurfaceFromWindow(::EGLDisplay display,
                                                     NativeWindowType win)
     {
         ::EGLSurface surface;
 
-        surface = eglCreateWindowSurface(display, mEglConfig, (EGLNativeWindowType)win, NULL);
+#if OGRE_PLATFORM == OGRE_PLATFORM_EMSCRIPTEN
+        int* gamma_attribs = NULL;
+#else
+        int gamma_attribs[] = {EGL_GL_COLORSPACE_KHR, EGL_GL_COLORSPACE_SRGB_KHR, EGL_NONE};
+#endif
+        mHwGamma = mHwGamma && mGLSupport->checkExtension("EGL_KHR_gl_colorspace");
+
+        surface = eglCreateWindowSurface(display, mEglConfig, (EGLNativeWindowType)win, mHwGamma ? gamma_attribs : NULL);
         EGL_CHECK_ERROR
 
         if (surface == EGL_NO_SURFACE)
@@ -217,11 +233,6 @@ namespace Ogre {
                         "Fail to create EGLSurface based on NativeWindowType");
         }
         return surface;
-    }
-
-    bool EGLWindow::requiresTextureFlipping() const
-    {
-        return false;
     }
 
     void EGLWindow::setVSyncEnabled(bool vsync) {
@@ -250,10 +261,23 @@ namespace Ogre {
         EGL_CHECK_ERROR
     }
 
-    void EGLWindow::setVSyncInterval(unsigned int interval) {
-        mVSyncInterval = interval;
-        if (mVSync)
-            setVSyncEnabled(true);
-    }
+    void EGLWindow::finaliseWindow()
+    {
+        // query selected config
+        int Rsz, Gsz, Bsz, Asz, fsaa;
+        mGLSupport->getGLConfigAttrib(mEglConfig, EGL_RED_SIZE, &Rsz);
+        mGLSupport->getGLConfigAttrib(mEglConfig, EGL_BLUE_SIZE, &Gsz);
+        mGLSupport->getGLConfigAttrib(mEglConfig, EGL_GREEN_SIZE, &Bsz);
+        mGLSupport->getGLConfigAttrib(mEglConfig, EGL_ALPHA_SIZE, &Asz);
+        mGLSupport->getGLConfigAttrib(mEglConfig, EGL_SAMPLES, &fsaa);
 
+        LogManager::getSingleton().logMessage(
+            StringUtil::format("EGLWindow: colourBufferSize=%d/%d/%d/%d gamma=%d FSAA=%d", Rsz, Bsz, Gsz,
+                               Asz, mHwGamma, fsaa));
+
+        mActive = true;
+        mVisible = true;
+        mFSAA = fsaa;
+        mClosed = false;
+    }
 }

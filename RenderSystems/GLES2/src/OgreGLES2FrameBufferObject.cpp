@@ -171,12 +171,7 @@ namespace Ogre {
                     ss << ".";
                     OGRE_EXCEPT(Exception::ERR_INVALIDPARAMS, ss.str(), "GLES2FrameBufferObject::initialise");
                 }
-                if(mColour[x].buffer->getGLFormat() != format)
-                {
-                    StringStream ss;
-                    ss << "Attachment " << x << " has incompatible format.";
-                    OGRE_EXCEPT(Exception::ERR_INVALIDPARAMS, ss.str(), "GLES2FrameBufferObject::initialise");
-                }
+
                 mColour[x].buffer->bindToFramebuffer(
                     isDepth ? GL_DEPTH_ATTACHMENT : (GL_COLOR_ATTACHMENT0 + x), mColour[x].zoffset);
             }
@@ -231,17 +226,6 @@ namespace Ogre {
             // Drawbuffer extension supported, use it
             if(!isDepth)
                 OGRE_CHECK_GL_ERROR(glDrawBuffers(n, bufs));
-
-            if (mMultisampleFB)
-            {
-                // we need a read buffer because we'll be blitting to mFB
-                OGRE_CHECK_GL_ERROR(glReadBuffer(bufs[0]));
-            }
-            else
-            {
-                // No read buffer, by default, if we want to read anyway we must not forget to set this.
-                OGRE_CHECK_GL_ERROR(glReadBuffer(GL_NONE));
-            }
         }
         // Check status
         GLuint status;
@@ -360,8 +344,8 @@ namespace Ogre {
 
         if( glDepthBuffer )
         {
-            GLES2RenderBuffer *depthBuf   = glDepthBuffer->getDepthBuffer();
-            GLES2RenderBuffer *stencilBuf = glDepthBuffer->getStencilBuffer();
+            auto *depthBuf   = glDepthBuffer->getDepthBuffer();
+            auto *stencilBuf = glDepthBuffer->getStencilBuffer();
 
             //Attach depth buffer, if it has one.
             if( depthBuf )

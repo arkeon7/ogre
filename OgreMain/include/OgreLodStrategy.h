@@ -40,7 +40,7 @@ namespace Ogre {
     /** \addtogroup Core
     *  @{
     */
-    /** \addtogroup LOD
+    /** \defgroup LOD Level of Detail
     *  @{
     */
     /** Strategy for determining level of detail.
@@ -52,7 +52,7 @@ namespace Ogre {
     */
     class _OgreExport LodStrategy : public LodAlloc
     {
-    protected:
+    private:
         /** Name of this strategy. */
         String mName;
 

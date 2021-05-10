@@ -37,7 +37,6 @@ THE SOFTWARE.
 #define __OGRE_ANY_H__
 
 #include "OgrePrerequisites.h"
-#include "OgreException.h"
 #include <typeinfo>
 #include "OgreHeaderPrefix.h"
 
@@ -66,7 +65,7 @@ namespace Ogre
         }
 
         template<typename ValueType>
-        explicit Any(const ValueType & value)
+        Any(const ValueType & value)
           : mContent(OGRE_NEW_T(holder<ValueType>, MEMCATEGORY_GENERAL)(value))
         {
         }
@@ -120,7 +119,8 @@ namespace Ogre
         /// @deprecated use type() instead
         OGRE_DEPRECATED const std::type_info& getType() const { return type(); }
 
-        inline friend std::ostream& operator <<
+        /// @deprecated no longer supported
+        OGRE_DEPRECATED friend std::ostream& operator <<
             ( std::ostream& o, const Any& v )
         {
             if (v.mContent)
@@ -181,7 +181,7 @@ namespace Ogre
 
             virtual void writeToStream(std::ostream& o)
             {
-                o << held;
+                o << "Any::ValueType";
             }
 
 
@@ -403,12 +403,7 @@ namespace Ogre
         const ValueType * result = any_cast<ValueType>(&operand);
         if(!result)
         {
-            StringStream str;
-            str << "Bad cast from type '" << operand.type().name() << "' "
-                << "to '" << typeid(ValueType).name() << "'";
-            OGRE_EXCEPT(Exception::ERR_INVALIDPARAMS,
-                str.str(), 
-                "Ogre::any_cast");
+            throw std::bad_cast();
         }
         return *result;
     }

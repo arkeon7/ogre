@@ -30,6 +30,7 @@ THE SOFTWARE.
 
 #include "OgrePrerequisites.h"
 #include "OgreCommon.h"
+#include "OgreColourValue.h"
 #include "OgreHeaderPrefix.h"
 
 namespace Ogre {
@@ -41,10 +42,14 @@ namespace Ogre {
     */
     /** The pixel format used for images, textures, and render surfaces
      *
-     * @note the components are specified in "packed" native byte order.
-     * For PF_BYTE_* formats this means that platform endianess changes the order:
-     * e.g. Ogre::PF_BYTE_RGBA on little endian (x86) forms an integer as Ogre::PF_A8B8G8R8,
-     * while on big endian it "packs" as Ogre::PF_R8G8B8A8
+     * A pixel format described the storage format of pixel data. It defines the way pixels are encoded in memory.
+     * The components are specified in "packed" native byte order for native endian (16, 24 and 32 bit) integers.
+     * This means that a pixel with format Ogre::PF_A8R8G8B8 can be seen as a 32 bit integer, written as @c 0xAARRGGBB in hexadecimal
+     * on a little-endian (x86) machine or as @c 0xBBGGRRAA on a big-endian machine.
+     * The example above would be expressed with an array of bytes as `{0xBB, 0xGG, 0xRR, 0xAA}` on both machines.
+     * Therefore, one would use the Ogre::PF_BYTE_BGRA format when reading pixel data expressed in bytes.
+     * This format aliases to either Ogre::PF_A8B8G8R8 or Ogre::PF_R8G8B8A8
+     * depending on the machine endianess.
      */
     enum PixelFormat
     {
@@ -209,7 +214,8 @@ namespace Ogre {
         /// 8-bit pixel format, all bits red.
         PF_R8,
         /// 16-bit pixel format, 8 bits red, 8 bits green.
-        PF_RG8,
+        PF_R8G8,
+        PF_RG8 = PF_R8G8,
         /// 8-bit pixel format, 8 bits red (signed normalised int).
         PF_R8_SNORM,
         /// 16-bit pixel format, 8 bits red (signed normalised int), 8 bits blue (signed normalised int).
@@ -268,6 +274,9 @@ namespace Ogre {
         PF_ASTC_RGBA_12X10_LDR,
         /// ASTC (ARM Adaptive Scalable Texture Compression RGBA, block size 12x12)
         PF_ASTC_RGBA_12X12_LDR,
+        PF_DEPTH32,
+        /// Depth texture format with 32-bit floating point
+        PF_DEPTH32F,
         /// Number of pixel formats currently defined
         PF_COUNT,
         // endianess aware aliases
@@ -558,9 +567,6 @@ namespace Ogre {
         */
         static PixelFormat getFormatFromName(const String& name, bool accessibleOnly = false, bool caseSensitive = false);
 
-        /// @deprecated do not use
-        OGRE_DEPRECATED static String getBNFExpressionOfPixelFormats(bool accessibleOnly = false);
-
         /** Returns the similar format but acoording with given bit depths.
             @param fmt      The original foamt.
             @param integerBits Preferred bit depth (pixel bits) for integer pixel format.
@@ -577,7 +583,10 @@ namespace Ogre {
             @param pf       Pixelformat in which to write the colour
             @param dest     Destination memory location
         */
-        static void packColour(const ColourValue &colour, const PixelFormat pf,  void* dest);
+        static void packColour(const ColourValue& colour, const PixelFormat pf, void* dest)
+        {
+            packColour(colour.r, colour.g, colour.b, colour.a, pf, dest);
+        }
         /** Pack a colour value to memory
             @param r,g,b,a  The four colour components, range 0.0f to 1.0f
                             (an exception to this case exists for floating point pixel
@@ -586,13 +595,7 @@ namespace Ogre {
             @param dest     Destination memory location
         */
         static void packColour(const uint8 r, const uint8 g, const uint8 b, const uint8 a, const PixelFormat pf,  void* dest);
-         /** Pack a colour value to memory
-            @param r,g,b,a  The four colour components, range 0.0f to 1.0f
-                            (an exception to this case exists for floating point pixel
-                            formats, which don't clamp to 0.0f..1.0f)
-            @param pf       Pixelformat in which to write the colour
-            @param dest     Destination memory location
-        */
+        /// @overload
         static void packColour(const float r, const float g, const float b, const float a, const PixelFormat pf,  void* dest);
 
         /** Unpack a colour value from memory
@@ -600,28 +603,27 @@ namespace Ogre {
             @param pf       Pixelformat in which to read the colour
             @param src      Source memory location
         */
-        static void unpackColour(ColourValue *colour, PixelFormat pf,  const void* src);
+        static void unpackColour(ColourValue& colour, PixelFormat pf, const void* src)
+        {
+            unpackColour(&colour.r, &colour.g, &colour.b, &colour.a, pf, src);
+        }
+        /// @overload
+        static void unpackColour(ColourValue* colour, PixelFormat pf, const void* src)
+        {
+            unpackColour(&colour->r, &colour->g, &colour->b, &colour->a, pf, src);
+        }
         /** Unpack a colour value from memory
-            @param r        The red channel is returned here (as byte)
-            @param g        The blue channel is returned here (as byte)
-            @param b        The green channel is returned here (as byte)
-            @param a        The alpha channel is returned here (as byte)
-            @param pf       Pixelformat in which to read the colour
-            @param src      Source memory location
-            @remarks    This function returns the colour components in 8 bit precision,
-                this will lose precision when coming from PF_A2R10G10B10 or floating
-                point formats.  
-        */
-        static void unpackColour(uint8 *r, uint8 *g, uint8 *b, uint8 *a, PixelFormat pf,  const void* src);
-        /** Unpack a colour value from memory
-            @param r        The red channel is returned here (as float)
-            @param g        The blue channel is returned here (as float)
-            @param b        The green channel is returned here (as float)
-            @param a        The alpha channel is returned here (as float)
+            @param r,g,b,a  The four colour channels are returned here
             @param pf       Pixelformat in which to read the colour
             @param src      Source memory location
         */
         static void unpackColour(float *r, float *g, float *b, float *a, PixelFormat pf,  const void* src); 
+        /** @overload
+            @note This function returns the colour components in 8 bit precision,
+                this will lose precision when coming from #PF_A2R10G10B10 or floating
+                point formats.
+        */
+        static void unpackColour(uint8 *r, uint8 *g, uint8 *b, uint8 *a, PixelFormat pf,  const void* src);
         
         /** Convert consecutive pixels from one format to another. No dithering or filtering is being done. 
             Converting from RGB to luminance takes the R channel.  In case the source and destination format match,
@@ -630,8 +632,12 @@ namespace Ogre {
             @param  srcFormat   Pixel format of source region
             @param  dst         Pointer to destination region
             @param  dstFormat   Pixel format of destination region
+            @param  count       The number of pixels to convert
          */
-        static void bulkPixelConversion(void *src, PixelFormat srcFormat, void *dst, PixelFormat dstFormat, unsigned int count);
+        static void bulkPixelConversion(void *src, PixelFormat srcFormat, void *dst, PixelFormat dstFormat, unsigned int count)
+        {
+            bulkPixelConversion(PixelBox(count, 1, 1, srcFormat, src), PixelBox(count, 1, 1, dstFormat, dst));
+        }
 
         /** Convert pixels from one format to another. No dithering or filtering is being done. Converting
             from RGB to luminance takes the R channel. 
@@ -648,6 +654,8 @@ namespace Ogre {
          */
         static void bulkPixelVerticalFlip(const PixelBox &box);
     };
+
+    inline const String& to_string(PixelFormat v) { return PixelUtil::getFormatName(v); }
     /** @} */
     /** @} */
 

@@ -31,8 +31,6 @@ THE SOFTWARE.
 #ifdef RTSHADER_SYSTEM_BUILD_EXT_SHADERS
 #include "OgreShaderSubRenderState.h"
 
-#define SGX_FUNC_TRIPLANAR_TEXTURING "SGX_TriplanarTexturing"
-
 namespace Ogre {
 namespace RTShader {
 
@@ -176,7 +174,7 @@ public:
     /** 
     @see SubRenderState::updateGpuProgramsParams.
     */
-    virtual void updateGpuProgramsParams(Renderable* rend, Pass* pass, const AutoParamDataSource* source, const LightList* pLightList);
+    virtual void updateGpuProgramsParams(Renderable* rend, const Pass* pass, const AutoParamDataSource* source, const LightList* pLightList);
 
 };
 

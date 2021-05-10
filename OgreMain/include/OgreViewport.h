@@ -281,8 +281,10 @@ namespace Ogre {
 
         /** Access to actual dimensions (based on target size).
         */
-        void getActualDimensions(
-            int &left, int &top, int &width, int &height ) const;
+        Rect getActualDimensions() const;
+
+        /// @deprecated
+        OGRE_DEPRECATED void getActualDimensions(int& left, int& top, int& width, int& height) const;
 
         bool _isUpdated(void) const;
         void _clearUpdatedFlag(void);
@@ -401,7 +403,7 @@ namespace Ogre {
 		/** Returns the current colour buffer type for this viewport.*/
 		ColourBufferType getDrawBuffer() const;
 
-    protected:
+    private:
         Camera* mCamera;
         RenderTarget* mTarget;
         /// Relative dimensions, irrespective of target dimensions (0..1)

@@ -54,10 +54,8 @@ namespace RTShader {
         */
         virtual String toString () const
         {
-            const String& lang = ShaderGenerator::getSingleton().getTargetLanguage();
             StringStream str;
-            str << (!lang.empty() && lang[0] == 'g' ? "vec2(" : "float2(");
-            str << std::showpoint << mValue.x << "," << mValue.y << ")";
+            str << "vec2(" << std::showpoint << mValue.x << "," << mValue.y << ")";
             return str.str();
         }
     };
@@ -81,10 +79,8 @@ namespace RTShader {
         */
         virtual String toString () const
         {
-            const String& lang = ShaderGenerator::getSingleton().getTargetLanguage();
             StringStream str;
-            str << (!lang.empty() && lang[0] == 'g' ? "vec3(" : "float3(");
-            str << std::showpoint << mValue.x << "," << mValue.y << "," << mValue.z << ")";
+            str << "vec3(" << std::showpoint << mValue.x << "," << mValue.y << "," << mValue.z << ")";
             return str.str();
         }
     };
@@ -108,10 +104,8 @@ namespace RTShader {
         */
         virtual String toString () const
         {
-            const String& lang = ShaderGenerator::getSingleton().getTargetLanguage();
             StringStream str;
-            str << (!lang.empty() && lang[0] == 'g' ? "vec4(" : "float4(");
-            str << std::showpoint << mValue.x << "," << mValue.y << "," << mValue.z << "," << mValue.w << ")";
+            str << "vec4(" << std::showpoint << mValue.x << "," << mValue.y << "," << mValue.z << "," << mValue.w << ")";
             return str.str();
         }
     };
@@ -252,6 +246,8 @@ static GpuConstantType getGCType(const GpuProgramParameters::AutoConstantDefinit
         return GCT_FLOAT4;
     case 8:
         return GCT_MATRIX_2X4;
+    case 9:
+        return GCT_MATRIX_3X3;
     case 12:
         return GCT_MATRIX_3X4;
     case 16:
@@ -364,22 +360,25 @@ void UniformParameter::bind(GpuProgramParametersSharedPtr paramsPtr)
 {   
     if (paramsPtr.get() != NULL)
     {
-        const GpuConstantDefinition* def = paramsPtr->_findNamedConstantDefinition(mBindName.empty() ? mName : mBindName, true);
+        // do not throw on failure: some RS optimize unused uniforms away. Also unit tests run without any RS
+        const GpuConstantDefinition* def = paramsPtr->_findNamedConstantDefinition(mBindName.empty() ? mName : mBindName, false);
 
         if (def != NULL)
         {
             mParamsPtr = paramsPtr.get();
             mPhysicalIndex = def->physicalIndex;
+            mElementSize = def->elementSize;
+            mVariability = def->variability;
         }
     }
 }
 
 //-----------------------------------------------------------------------
-ParameterPtr ParameterFactory::createInPosition(int index)
+ParameterPtr ParameterFactory::createInPosition(int index, Parameter::Content content)
 {
-    return ParameterPtr(OGRE_NEW Parameter(GCT_FLOAT4, "iPos_" + StringConverter::toString(index), 
-        Parameter::SPS_POSITION, index, 
-        Parameter::SPC_POSITION_OBJECT_SPACE));
+    return std::make_shared<Parameter>(GCT_FLOAT4, "iPos_" + StringConverter::toString(index),
+                                       Parameter::SPS_POSITION, index,
+                                       content);
 }
 
 //-----------------------------------------------------------------------
@@ -412,7 +411,7 @@ ParameterPtr ParameterFactory::createInWeights(int index)
 ParameterPtr ParameterFactory::createInIndices(int index)
 {
 	return ParameterPtr(OGRE_NEW Parameter(
-		GCT_FLOAT4
+		GCT_UINT4
 	, "iBlendIndices_" + StringConverter::toString(index), 
         Parameter::SPS_BLEND_INDICES, index, 
         Parameter::SPC_BLEND_INDICES));
@@ -480,24 +479,9 @@ ParameterPtr ParameterFactory::createInTexcoord(GpuConstantType type, int index,
     switch (type)
     {
     case GCT_FLOAT1:
-        return createInTexcoord1(index, content);
-        
     case GCT_FLOAT2:
-        return createInTexcoord2(index, content);
-        
     case GCT_FLOAT3:
-        return createInTexcoord3(index, content);
-        
     case GCT_FLOAT4:
-        return createInTexcoord4(index, content);       
-    default:
-    case GCT_SAMPLER1D:
-    case GCT_SAMPLER2D:
-    case GCT_SAMPLER2DARRAY:
-    case GCT_SAMPLER3D:
-    case GCT_SAMPLERCUBE:
-    case GCT_SAMPLER1DSHADOW:
-    case GCT_SAMPLER2DSHADOW:
     case GCT_MATRIX_2X2:
     case GCT_MATRIX_2X3:
     case GCT_MATRIX_2X4:
@@ -515,6 +499,16 @@ ParameterPtr ParameterFactory::createInTexcoord(GpuConstantType type, int index,
     case GCT_UINT2:
     case GCT_UINT3:
     case GCT_UINT4:
+        return std::make_shared<Parameter>(type, StringUtil::format("iTexcoord_%d", index),
+                                           Parameter::SPS_TEXTURE_COORDINATES, index, content);
+    default:
+    case GCT_SAMPLER1D:
+    case GCT_SAMPLER2D:
+    case GCT_SAMPLER2DARRAY:
+    case GCT_SAMPLER3D:
+    case GCT_SAMPLERCUBE:
+    case GCT_SAMPLER1DSHADOW:
+    case GCT_SAMPLER2DSHADOW:
     case GCT_UNKNOWN:
         break;
     }
@@ -528,17 +522,11 @@ ParameterPtr ParameterFactory::createOutTexcoord(GpuConstantType type, int index
     switch (type)
     {
     case GCT_FLOAT1:
-        return createOutTexcoord1(index, content);
-
     case GCT_FLOAT2:
-        return createOutTexcoord2(index, content);
-
     case GCT_FLOAT3:
-        return createOutTexcoord3(index, content);
-
     case GCT_FLOAT4:
-        return createOutTexcoord4(index, content);      
-    
+        return std::make_shared<Parameter>(type, StringUtil::format("oTexcoord_%d", index),
+                                           Parameter::SPS_TEXTURE_COORDINATES, index, content);
     default:
     case GCT_SAMPLER1D:
     case GCT_SAMPLER2D:

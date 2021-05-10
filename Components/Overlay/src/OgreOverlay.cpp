@@ -29,7 +29,7 @@ THE SOFTWARE.
 #include "OgreOverlay.h"
 #include "OgreOverlayContainer.h"
 #include "OgreOverlayManager.h"
-#include "OgreVector3.h"
+#include "OgreVector.h"
 #include "OgreSceneNode.h"
 #include "OgreRenderQueue.h"
 #include "OgreCamera.h"
@@ -116,6 +116,11 @@ namespace Ogre {
         mVisible = false;
     }
     //---------------------------------------------------------------------
+    void Overlay::setVisible(bool visible)
+    {
+        mVisible = visible;
+    }
+    //---------------------------------------------------------------------
     void Overlay::initialise(void)
     {
         OverlayContainerList::iterator i, iend;
@@ -138,7 +143,6 @@ namespace Ogre {
         Matrix4 xform;
         _getWorldTransforms(&xform);
         cont->_notifyWorldTransforms(xform);
-        cont->_notifyViewport();
     }
     //---------------------------------------------------------------------
     void Overlay::remove2D(OverlayContainer* cont)

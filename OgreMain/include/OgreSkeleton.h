@@ -85,7 +85,7 @@ namespace Ogre {
     class _OgreExport Skeleton : public Resource, public AnimationContainer
     {
         friend class SkeletonInstance;
-    protected:
+    private:
         /// Internal constructor for use by SkeletonInstance only
         Skeleton();
 
@@ -349,8 +349,14 @@ namespace Ogre {
             LinkedSkeletonAnimSourceList;
         typedef ConstVectorIterator<LinkedSkeletonAnimSourceList> 
             LinkedSkeletonAnimSourceIterator;
-        /// Get an iterator over the linked skeletons used as animation sources
-        virtual LinkedSkeletonAnimSourceIterator 
+        /// Get the linked skeletons used as animation sources
+        virtual const LinkedSkeletonAnimSourceList& getLinkedSkeletonAnimationSources() const
+        {
+            return mLinkedSkeletonAnimSourceList;
+        }
+
+        /// @deprecated use getLinkedSkeletonAnimationSources
+        OGRE_DEPRECATED virtual LinkedSkeletonAnimSourceIterator
             getLinkedSkeletonAnimationSourceIterator(void) const;
 
         /// Internal method for marking the manual bones as dirty
@@ -417,7 +423,7 @@ namespace Ogre {
         virtual void _buildMapBoneByName(const Skeleton* source,
             BoneHandleMap& boneHandleMap) const;
 
-    protected:
+    private:
         SkeletonAnimationBlendMode mBlendState;
         /// Storage of bones, indexed by bone handle
         BoneList mBoneList;
@@ -454,13 +460,11 @@ namespace Ogre {
         /// Debugging method
         void _dumpContents(const String& filename);
 
-        /** @copydoc Resource::loadImpl
-        */
-        void loadImpl(void);
+        void loadImpl() {}
+        void unloadImpl() { unprepareImpl(); }
 
-        /** @copydoc Resource::unloadImpl
-        */
-        void unloadImpl(void);
+        void prepareImpl(void);
+        void unprepareImpl(void);
         /// @copydoc Resource::calculateSize
         size_t calculateSize(void) const;
 

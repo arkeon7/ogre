@@ -53,8 +53,7 @@ namespace Ogre
     };
 
     /** A TerrainMaterialGenerator which can cope with normal mapped, specular mapped
-        terrain. 
-        @note Requires the Cg plugin to render correctly
+        terrain.
     */
     class _OgreTerrainExport TerrainMaterialGeneratorA : public TerrainMaterialGenerator
     {
@@ -149,13 +148,8 @@ namespace Ogre
             */
             bool getReceiveDynamicShadowsLowLod() const { return mLowLodShadows; }
 
-            /// Internal
-            bool _isSM3Available() const { return mSM3Available; }
-            bool _isSM4Available() const { return mSM4Available; }
-            String _getShaderLanguage() const { return mShaderLanguage; }
-        
             bool isShadowingEnabled(TechniqueType tt, const Terrain* terrain) const;
-        protected:
+        private:
             typedef StringStream stringstream;
 
             void addTechnique(const MaterialPtr& mat, const Terrain* terrain, TechniqueType tt);
@@ -171,9 +165,6 @@ namespace Ogre
             PSSMShadowCameraSetup* mPSSM;
             bool mDepthShadows;
             bool mLowLodShadows;
-            bool mSM3Available;
-            bool mSM4Available;
-            String mShaderLanguage;
         };
     };
     /** @} */

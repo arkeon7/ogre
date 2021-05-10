@@ -28,7 +28,6 @@ THE SOFTWARE.
 #include "OgreStableHeaders.h"
 
 #include "OgreSkeletonManager.h"
-#include "OgreIteratorWrappers.h"
 #include "OgreEdgeListBuilder.h"
 #include "OgreAnimation.h"
 #include "OgreAnimationState.h"
@@ -219,9 +218,6 @@ namespace Ogre {
     }
     void Mesh::loadImpl()
     {
-        MeshSerializer serializer;
-        serializer.setListener(MeshManager::getSingleton().getListener());
-
         // If the only copy is local on the stack, it will be cleaned
         // up reliably in case of exceptions, etc
         DataStreamPtr data(mFreshFromDisk);
@@ -233,14 +229,12 @@ namespace Ogre {
                         "Mesh::loadImpl()");
         }
 
-        serializer.importMesh(data, this);
+        String baseName, strExt;
+        StringUtil::splitBaseFilename(mName, baseName, strExt);
+        auto codec = Codec::getCodec(strExt);
+        OgreAssert(codec, ("No codec found to load "+mName).c_str());
 
-        /* check all submeshes to see if their materials should be
-           updated.  If the submesh has texture aliases that match those
-           found in the current material then a new material is created using
-           the textures from the submesh.
-        */
-        updateMaterialForAllSubMeshes();
+        codec->decode(data, this);
     }
 
     //-----------------------------------------------------------------------
@@ -537,8 +531,7 @@ namespace Ogre {
     //-----------------------------------------------------------------------
     void Mesh::addBoneAssignment(const VertexBoneAssignment& vertBoneAssign)
     {
-        mBoneAssignments.insert(
-            VertexBoneAssignmentList::value_type(vertBoneAssign.vertexIndex, vertBoneAssign));
+        mBoneAssignments.emplace(vertBoneAssign.vertexIndex, vertBoneAssign);
         mBoneAssignmentsOutOfDate = true;
     }
     //-----------------------------------------------------------------------
@@ -655,8 +648,7 @@ namespace Ogre {
                 for (i = range.first; i != range.second; ++i)
                 {
                     // insert value weight->iterator
-                    weightToAssignmentMap.insert(
-                        WeightIteratorMap::value_type(i->second.weight, i));
+                    weightToAssignmentMap.emplace(i->second.weight, i);
                 }
                 // Reverse iterate over weight map, remove lowest n
                 unsigned short numToRemove = currBones - OGRE_MAX_BLEND_WEIGHTS;
@@ -993,7 +985,7 @@ namespace Ogre {
             const VertexElement* posElem = vertexData->vertexDeclaration->findElementBySemantic(VES_POSITION);
             HardwareVertexBufferSharedPtr vbuf = vertexData->vertexBufferBinding->getBuffer(posElem->getSource());
             // if usage is write only,
-            if ( !vbuf->hasShadowBuffer() && (vbuf->getUsage() & HardwareBuffer::HBU_WRITE_ONLY) )
+            if ( !vbuf->hasShadowBuffer() && (vbuf->getUsage() & HBU_DETAIL_WRITE_ONLY) )
             {
                 // can't do it
                 return Real(0.0f);
@@ -1116,11 +1108,6 @@ namespace Ogre {
     const String& Mesh::getSkeletonName(void) const
     {
         return mSkeletonName;
-    }
-    //---------------------------------------------------------------------
-    ushort Mesh::getNumLodLevels(void) const
-    {
-        return mNumLods;
     }
     //---------------------------------------------------------------------
     const MeshLodUsage& Mesh::getLodLevel(ushort index) const
@@ -2234,15 +2221,12 @@ namespace Ogre {
 
         // Scan all animations and determine the type of animation tracks
         // relating to each vertex data
-        for(AnimationList::const_iterator ai = mAnimationsList.begin();
-            ai != mAnimationsList.end(); ++ai)
+        for(const auto& ai : mAnimationsList)
         {
-            Animation* anim = ai->second;
-            Animation::VertexTrackIterator vit = anim->getVertexTrackIterator();
-            while (vit.hasMoreElements())
+            for (const auto& vit : ai.second->_getVertexTrackList())
             {
-                VertexAnimationTrack* track = vit.getNext();
-                ushort handle = track->getHandle();
+                VertexAnimationTrack* track = vit.second;
+                ushort handle = vit.first;
                 if (handle == 0)
                 {
                     // shared data
@@ -2495,17 +2479,6 @@ namespace Ogre {
     const PoseList& Mesh::getPoseList(void) const
     {
         return mPoseList;
-    }
-    //---------------------------------------------------------------------
-    void Mesh::updateMaterialForAllSubMeshes(void)
-    {
-        // iterate through each sub mesh and request the submesh to update its material
-        std::vector<SubMesh*>::iterator subi;
-        for (subi = mSubMeshList.begin(); subi != mSubMeshList.end(); ++subi)
-        {
-            (*subi)->updateMaterialUsingTextureAliases();
-        }
-
     }
     //---------------------------------------------------------------------
     const LodStrategy *Mesh::getLodStrategy() const

@@ -43,10 +43,6 @@ namespace RTShader {
 *  @{
 */
 
-#define SGX_LIB_NORMALMAPLIGHTING                   "SGXLib_NormalMapLighting"
-#define SGX_FUNC_CONSTRUCT_TBNMATRIX                "SGX_ConstructTBNMatrix"
-#define SGX_FUNC_FETCHNORMAL                        "SGX_FetchNormal"
-
 /** Normal Map Lighting extension sub render state implementation.
 Derives from SubRenderState class.
 */
@@ -66,7 +62,7 @@ public:
     /** 
     @see SubRenderState::updateGpuProgramsParams.
     */
-    virtual void updateGpuProgramsParams(Renderable* rend, Pass* pass, const AutoParamDataSource* source, const LightList* pLightList);
+    virtual void updateGpuProgramsParams(Renderable* rend, const Pass* pass, const AutoParamDataSource* source, const LightList* pLightList);
 
     /** 
     @see SubRenderState::copyFrom.
@@ -96,12 +92,6 @@ public:
     enum NormalMapSpace
     {
         /**
-        Normal map contains normal data in tangent space.
-        This is the default normal mapping behavior and it requires that the
-        target mesh will have valid tangents within its vertex data.
-         */
-        NMS_TANGENT,
-        /**
         Normal map contains normal data in object local space.
         This normal mapping technique has the advantages of better visualization results,
         lack of artifacts that comes from texture mirroring usage, it doesn't requires tangent
@@ -109,7 +99,20 @@ public:
         The main drawback of using this kind of normal map is that the target object must be static
         in terms of local space rotations and translations.
          */
-        NMS_OBJECT
+        NMS_OBJECT = 1,
+        /**
+        Normal map contains normal data in tangent space.
+        This is the default normal mapping behavior and it requires that the
+        target mesh will have valid tangents within its vertex data.
+         */
+        NMS_TANGENT = 2,
+        /**
+        Normal map contains normal data in parallax corrected tangent space
+        The restrictions of NMS_TANGENT apply. Additionally the alpha
+        channel of the normal texture is expected to contain height displacement data.
+        This is used for parallax corrected rendering.
+         */
+        NMS_PARALLAX = 6
     };
 
     /** 
@@ -135,27 +138,19 @@ public:
     void setNormalMapFiltering(const FilterOptions minFilter, const FilterOptions magFilter, const FilterOptions mipFilter) 
     { mNormalMapSampler->setFiltering(minFilter, magFilter, mipFilter); }
 
-    /// @deprecated use getNormalMapSampler
-    OGRE_DEPRECATED void getNormalMapFiltering(FilterOptions& minFilter, FilterOptions& magFilter, FilterOptions& mipFilter) const
-    { minFilter = mNormalMapSampler->getFiltering(FT_MIN); magFilter = mNormalMapSampler->getFiltering(FT_MAG) ; mipFilter = mNormalMapSampler->getFiltering(FT_MIP); }
-
     /// @deprecated use setNormalMapSampler
     void setNormalMapAnisotropy(unsigned int anisotropy) { mNormalMapSampler->setAnisotropy(anisotropy); }
 
-    /// @deprecated use getNormalMapSampler
-    OGRE_DEPRECATED unsigned int getNormalMapAnisotropy() const { return mNormalMapSampler->getAnisotropy(); }
-
     /// @deprecated use setNormalMapSampler
     void setNormalMapMipBias(Real mipBias) { mNormalMapSampler->setMipmapBias(mipBias); }
-
-    /// @deprecated use getNormalMapSampler
-    OGRE_DEPRECATED Real getNormalMapMipBias() const { return mNormalMapSampler->getMipmapBias(); }
 
     /// return the normal map sampler
     const SamplerPtr& getNormalMapSampler() const { return mNormalMapSampler; }
 
     /// set the normal map sampler
     void setNormalMapSampler(const SamplerPtr& sampler) { mNormalMapSampler = sampler; }
+
+    bool setParameter(const String& name, const String& value) override;
 
 // Protected methods
 protected:
@@ -178,22 +173,12 @@ protected:
     /** 
     Internal method that adds related vertex shader functions invocations.
     */
-    bool addVSInvocation(Function* vsMain, const int groupOrder);
+    void addVSInvocation(const FunctionStageRef& stage);
 
     /** 
     Internal method that adds per light illumination component functions invocations.
     */
-    bool addVSIlluminationInvocation(LightParams* curLightParams, Function* vsMain, const int groupOrder);
-
-    /** 
-    Internal method that perform normal fetch invocation.
-    */
-    bool addPSNormalFetchInvocation(Function* psMain, const int groupOrder);
-
-    /** 
-    Internal method that adds per light illumination component functions invocations.
-    */
-    bool addPSIlluminationInvocation(LightParams* curLightParams, Function* psMain, const int groupOrder);
+    void addVSIlluminationInvocation(const LightParams* curLightParams, const FunctionStageRef& stage);
 
 // Attributes.
 protected:  
@@ -215,10 +200,6 @@ protected:
     UniformParameterPtr mCamPosWorldSpace;
     // Vertex shader world position parameter.
     ParameterPtr mVSWorldPosition;
-    // Vertex shader output view vector (position in camera space) parameter.
-    ParameterPtr mVSOutView;
-    // Pixel shader input view position (position in camera space) parameter.
-    ParameterPtr mPSInView;
     // Vertex shader input tangent.
     ParameterPtr mVSInTangent;
     // Vertex shader local TNB matrix.
@@ -227,8 +208,6 @@ protected:
     ParameterPtr mVSLocalDir;
     // Normal map texture sampler parameter.
     UniformParameterPtr mPSNormalMapSampler;
-    // Pixel shader normal parameter.
-    ParameterPtr mPSNormal;
     // Vertex shader input texture coordinates.
     ParameterPtr mVSInTexcoord;
     // Vertex shader output texture coordinates.

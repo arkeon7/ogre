@@ -41,7 +41,7 @@ THE SOFTWARE.
 #define STB_IMAGE_STATIC
 #include "stbi/stb_image.h"
 
-#if OGRE_NO_ZIP_ARCHIVE == 0
+#ifdef HAVE_ZLIB
 #include <zlib.h>
 static Ogre::uchar* custom_zlib_compress(Ogre::uchar* data, int data_len, int* out_len, int /*quality*/)
 {
@@ -73,7 +73,7 @@ namespace Ogre {
         stbi_convert_iphone_png_to_rgb(1);
         stbi_set_unpremultiply_on_load(1);
 
-        LogManager::getSingleton().logMessage("stb_image - v2.19 - public domain JPEG/PNG reader");
+        LogManager::getSingleton().logMessage("stb_image - v2.23 - public domain image loader");
         
         // Register codecs
         String exts = "jpeg,jpg,png,bmp,psd,tga,gif,pic,ppm,pgm,hdr";
@@ -84,11 +84,8 @@ namespace Ogre {
             msCodecList.push_back(codec);
             Codec::registerCodec(codec);
         }
-        
-        StringStream strExt;
-        strExt << "Supported formats: " << exts;
 
-        LogManager::getSingleton().logMessage(strExt.str());
+        LogManager::getSingleton().logMessage("Supported formats: " + exts);
     }
     //---------------------------------------------------------------------
     void STBIImageCodec::shutdown(void)
@@ -162,10 +159,9 @@ namespace Ogre {
         MemoryDataStreamPtr data = static_pointer_cast<MemoryDataStream>(encode(input, pData));
         std::ofstream f(outFileName.c_str(), std::ios::out | std::ios::binary);
 
-        if(!f.is_open()) {
-            OGRE_EXCEPT(Exception::ERR_INTERNAL_ERROR,
-                        "could not open file",
-                        "STBIImageCodec::encodeToFile" ) ;
+        if (!f.is_open())
+        {
+            OGRE_EXCEPT(Exception::ERR_INTERNAL_ERROR, "could not open file " + outFileName);
         }
 
         f.write((char*)data->getPtr(), data->size());
@@ -177,7 +173,7 @@ namespace Ogre {
         String contents = input->getAsString();
 
         int width, height, components;
-        stbi_uc* pixelData = stbi_load_from_memory((uchar*)contents.data(),
+        stbi_uc* pixelData = stbi_load_from_memory((const uchar*)contents.data(),
                 static_cast<int>(contents.size()), &width, &height, &components, 0);
 
         if (!pixelData)

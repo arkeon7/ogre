@@ -33,46 +33,62 @@ void ApplicationContextSDL::removeInputListener(NativeWindowType* win, InputList
 NativeWindowPair ApplicationContextSDL::createWindow(const Ogre::String& name, Ogre::uint32 w, Ogre::uint32 h, Ogre::NameValuePairList miscParams)
 {
     NativeWindowPair ret = {NULL, NULL};
-    parseWindowOptions(w, h, miscParams);
-
-    Ogre::ConfigOptionMap& ropts = mRoot->getRenderSystem()->getConfigOptions();
 
     if(!SDL_WasInit(SDL_INIT_VIDEO)) {
-        SDL_InitSubSystem(SDL_INIT_VIDEO);
+        SDL_InitSubSystem(SDL_INIT_VIDEO | SDL_INIT_GAMECONTROLLER);
     }
 
-    Uint32 flags = SDL_WINDOW_RESIZABLE;
+    auto p = mRoot->getRenderSystem()->getRenderWindowDescription();
+    miscParams.insert(p.miscParams.begin(), p.miscParams.end());
+    p.miscParams = miscParams;
+    p.name = name;
 
-    if(ropts["Full Screen"].currentValue == "Yes"){
-       flags = SDL_WINDOW_FULLSCREEN;
-    } else {
-       flags = SDL_WINDOW_RESIZABLE;
+    if(w > 0 && h > 0)
+    {
+        p.width = w;
+        p.height= h;
     }
 
-    ret.native = SDL_CreateWindow(name.c_str(),
-                                SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, w, h, flags);
+    int flags = p.useFullScreen ? SDL_WINDOW_FULLSCREEN : SDL_WINDOW_RESIZABLE;
+    int d = Ogre::StringConverter::parseInt(miscParams["monitorIndex"], 1) - 1;
+    ret.native =
+        SDL_CreateWindow(p.name.c_str(), SDL_WINDOWPOS_UNDEFINED_DISPLAY(d),
+                         SDL_WINDOWPOS_UNDEFINED_DISPLAY(d), p.width, p.height, flags);
 
-#if OGRE_PLATFORM == OGRE_PLATFORM_EMSCRIPTEN
-    SDL_GL_CreateContext(ret.native);
-    miscParams["currentGLContext"] = "true";
-#else
+#if OGRE_PLATFORM != OGRE_PLATFORM_EMSCRIPTEN
     SDL_SysWMinfo wmInfo;
     SDL_VERSION(&wmInfo.version);
     SDL_GetWindowWMInfo(ret.native, &wmInfo);
 #endif
 
+    // for tiny rendersystem
+    p.miscParams["sdlwin"] = Ogre::StringConverter::toString(size_t(ret.native));
+
 #if OGRE_PLATFORM == OGRE_PLATFORM_LINUX
-    miscParams["parentWindowHandle"] = Ogre::StringConverter::toString(size_t(wmInfo.info.x11.window));
+    p.miscParams["parentWindowHandle"] = Ogre::StringConverter::toString(size_t(wmInfo.info.x11.window));
 #elif OGRE_PLATFORM == OGRE_PLATFORM_WIN32
-    miscParams["externalWindowHandle"] = Ogre::StringConverter::toString(size_t(wmInfo.info.win.window));
+    p.miscParams["externalWindowHandle"] = Ogre::StringConverter::toString(size_t(wmInfo.info.win.window));
 #elif OGRE_PLATFORM == OGRE_PLATFORM_APPLE
     assert(wmInfo.subsystem == SDL_SYSWM_COCOA);
-    miscParams["externalWindowHandle"] = Ogre::StringConverter::toString(size_t(wmInfo.info.cocoa.window));
+    p.miscParams["externalWindowHandle"] = Ogre::StringConverter::toString(size_t(wmInfo.info.cocoa.window));
 #endif
 
-    ret.render = mRoot->createRenderWindow(name, w, h, false, &miscParams);
+    if(!mWindows.empty())
+    {
+        // additional windows should reuse the context
+        p.miscParams["currentGLContext"] = "true";
+    }
+
+    ret.render = mRoot->createRenderWindow(p);
     mWindows.push_back(ret);
     return ret;
+}
+
+void ApplicationContextSDL::_destroyWindow(const NativeWindowPair& win)
+{
+    ApplicationContextBase::_destroyWindow(win);
+    if(win.native)
+        SDL_DestroyWindow(win.native);
 }
 
 void ApplicationContextSDL::setWindowGrab(NativeWindowType* win, bool _grab)
@@ -80,23 +96,21 @@ void ApplicationContextSDL::setWindowGrab(NativeWindowType* win, bool _grab)
     SDL_bool grab = SDL_bool(_grab);
 
     SDL_SetWindowGrab(win, grab);
+#if OGRE_PLATFORM != OGRE_PLATFORM_APPLE
+    // osx workaround: mouse motion events are gone otherwise
     SDL_SetRelativeMouseMode(grab);
+#else
+    SDL_ShowCursor(!grab);
+#endif
 }
 
 void ApplicationContextSDL::shutdown()
 {
     ApplicationContextBase::shutdown();
 
-    for(WindowList::iterator it = mWindows.begin(); it != mWindows.end(); ++it)
-    {
-        if(it->native)
-            SDL_DestroyWindow(it->native);
-    }
-    if(!mWindows.empty()) {
+    if(SDL_WasInit(SDL_INIT_VIDEO)) {
         SDL_QuitSubSystem(SDL_INIT_VIDEO);
     }
-
-    mWindows.clear();
 }
 
 void ApplicationContextSDL::pollEvents()
@@ -125,8 +139,15 @@ void ApplicationContextSDL::pollEvents()
                     continue;
 
                 Ogre::RenderWindow* win = it->render;
-                win->windowMovedOrResized();
+                win->resize(event.window.data1, event.window.data2);
                 windowResized(win);
+            }
+            break;
+        case SDL_CONTROLLERDEVICEADDED:
+            if(auto c = SDL_GameControllerOpen(event.cdevice.which))
+            {
+                const char* name = SDL_GameControllerName(c);
+                Ogre::LogManager::getSingleton().stream() << "Opened Gamepad: " << (name ? name : "unnamed");
             }
             break;
         default:
@@ -134,15 +155,6 @@ void ApplicationContextSDL::pollEvents()
             break;
         }
     }
-
-#if OGRE_PLATFORM == OGRE_PLATFORM_APPLE
-    // hacky workaround for black window on OSX
-    for(const auto& win : mWindows)
-    {
-        SDL_SetWindowSize(win.native, win.render->getWidth(), win.render->getHeight());
-        win.render->windowMovedOrResized();
-    }
-#endif
 }
 
 }

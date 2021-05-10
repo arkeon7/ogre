@@ -117,7 +117,8 @@ namespace Ogre
                 XRRFreeScreenConfigInfo(screenConfig);
             }
         }
-        else
+
+        if(mVideoModes.empty())
         {
             mCurrentMode.width = DisplayWidth(mXDisplay, DefaultScreen(mXDisplay));
             mCurrentMode.height = DisplayHeight(mXDisplay, DefaultScreen(mXDisplay));
@@ -461,94 +462,6 @@ namespace Ogre
     }
 
     //-------------------------------------------------------------------------------------------------//
-    bool GLXGLSupport::loadIcon(const String &name, Pixmap *pixmap, Pixmap *bitmap)
-    {
-        Image image;
-        int width, height;
-        char* imageData;
-
-        if (! Ogre::ResourceGroupManager::getSingleton().resourceExists(ResourceGroupManager::DEFAULT_RESOURCE_GROUP_NAME, name))
-            return false;
-
-        try
-        {
-            // Try to load image
-            image.load(name, ResourceGroupManager::DEFAULT_RESOURCE_GROUP_NAME);
-
-            if(image.getFormat() != PF_A8R8G8B8)
-            {
-                // Image format must be RGBA
-                return false;
-            }
-
-            width  = image.getWidth();
-            height = image.getHeight();
-            imageData = (char*)image.getData();
-        }
-        catch(Exception &e)
-        {
-            // Could not find image; never mind
-            return false;
-        }
-
-        int bitmapLineLength = (width + 7) / 8;
-        int pixmapLineLength = 4 * width;
-
-        char* bitmapData = (char*)malloc(bitmapLineLength * height);
-        char* pixmapData = (char*)malloc(pixmapLineLength * height);
-
-        int sptr = 0, dptr = 0;
-
-        for(int y = 0; y < height; y++)
-        {
-            for(int x = 0; x < width; x++)
-            {
-                if (ImageByteOrder(mXDisplay) == MSBFirst)
-                {
-                    pixmapData[dptr + 0] = 0;
-                    pixmapData[dptr + 1] = imageData[sptr + 0];
-                    pixmapData[dptr + 2] = imageData[sptr + 1];
-                    pixmapData[dptr + 3] = imageData[sptr + 2];
-                }
-                else
-                {
-                    pixmapData[dptr + 3] = 0;
-                    pixmapData[dptr + 2] = imageData[sptr + 0];
-                    pixmapData[dptr + 1] = imageData[sptr + 1];
-                    pixmapData[dptr + 0] = imageData[sptr + 2];
-                }
-
-                if(((unsigned char)imageData[sptr + 3])<128)
-                {
-                    bitmapData[y*bitmapLineLength+(x>>3)] &= ~(1<<(x&7));
-                }
-                else
-                {
-                    bitmapData[y*bitmapLineLength+(x>>3)] |= 1<<(x&7);
-                }
-                sptr += 4;
-                dptr += 4;
-            }
-        }
-
-        // Create bitmap on server and copy over bitmapData
-        *bitmap = XCreateBitmapFromData(mXDisplay, DefaultRootWindow(mXDisplay), bitmapData, width, height);
-
-        free(bitmapData);
-
-        // Create pixmap on server and copy over pixmapData (via pixmapXImage)
-        *pixmap = XCreatePixmap(mXDisplay, DefaultRootWindow(mXDisplay), width, height, 24);
-
-        GC gc = XCreateGC (mXDisplay, DefaultRootWindow(mXDisplay), 0, NULL);
-        XImage *pixmapXImage = XCreateImage(mXDisplay, NULL, 24, ZPixmap, 0, pixmapData, width, height, 8, width*4);
-        XPutImage(mXDisplay, *pixmap, gc, pixmapXImage, 0, 0, 0, 0, width, height);
-        XDestroyImage(pixmapXImage);
-        XFreeGC(mXDisplay, gc);
-
-        return true;
-    }
-
-    //-------------------------------------------------------------------------------------------------//
     Display* GLXGLSupport::getGLDisplay(void)
     {
         if (! mGLDisplay)
@@ -617,28 +530,28 @@ namespace Ogre
         ::GLXContext glxContext = NULL;
 
         int profile;
-        int minVersion;
-        int maxVersion = 5;
+        int majorVersion;
+        int minorVersion = 0;
 
         switch(mContextProfile) {
         case CONTEXT_COMPATIBILITY:
             profile = GLX_CONTEXT_COMPATIBILITY_PROFILE_BIT_ARB;
-            minVersion = 1;
-            maxVersion = 3; // requesting 3.1 might return 3.2 core profile
+            majorVersion = 1;
             break;
         case CONTEXT_ES:
             profile = GLX_CONTEXT_ES2_PROFILE_BIT_EXT;
-            minVersion = 2;
+            majorVersion = 2;
             break;
         default:
             profile = GLX_CONTEXT_CORE_PROFILE_BIT_ARB;
-            minVersion = 3;
+            majorVersion = 3;
+            minorVersion = 3; // 3.1 would be sufficient per spec, but we need 3.3 anyway..
             break;
         }
 
         int context_attribs[] = {
-                GLX_CONTEXT_MAJOR_VERSION_ARB, maxVersion,
-                GLX_CONTEXT_MINOR_VERSION_ARB, 0,
+                GLX_CONTEXT_MAJOR_VERSION_ARB, majorVersion,
+                GLX_CONTEXT_MINOR_VERSION_ARB, minorVersion,
                 GLX_CONTEXT_PROFILE_MASK_ARB, profile,
                 None
         };
@@ -650,35 +563,21 @@ namespace Ogre
         PFNGLXCREATECONTEXTATTRIBSARBPROC _glXCreateContextAttribsARB;
         _glXCreateContextAttribsARB = (PFNGLXCREATECONTEXTATTRIBSARBPROC)getProcAddress("glXCreateContextAttribsARB");
 
-	OgreAssert(_glXCreateContextAttribsARB, "glXCreateContextAttribsARB() function not found");
-
-        while(!glxContext && (context_attribs[1] >= minVersion))
+        if(_glXCreateContextAttribsARB)
         {
-            ctxErrorOccurred = false;
-            glxContext = _glXCreateContextAttribsARB(mGLDisplay, fbConfig, shareList, direct, context_attribs);
-            // Sync to ensure any errors generated are processed.
-            XSync( mGLDisplay, False );
-            if ( !ctxErrorOccurred && glxContext )
+            // find maximal supported context version
+            context_attribs[1] = 4;
+            context_attribs[3] = 6;
+            while(!glxContext && (context_attribs[1] >= majorVersion && context_attribs[3] >= minorVersion))
             {
-                LogManager::getSingleton().logMessage("Created GL " + StringConverter::toString(context_attribs[1]) + "." + StringConverter::toString(context_attribs[3]) + " context" );
-            }
-            else
-            {
-                if(context_attribs[3] == 0)
-                {
-                    context_attribs[1] -= 1;
-                    context_attribs[3] = 6;
-                }
-                else
-                {
-                    context_attribs[3] -= 1;
-                }
+                ctxErrorOccurred = false;
+                glxContext = _glXCreateContextAttribsARB(mGLDisplay, fbConfig, shareList, direct, context_attribs);
+                context_attribs[1] -= context_attribs[3] == 0; // only decrement if minor == 0
+                context_attribs[3] = (context_attribs[3] - 1 + 7) % 7; // decrement: -1 -> 6
             }
         }
-
-        if (!glxContext) {
-            ctxErrorOccurred = false;
-
+        else
+        {
             // try old style context creation as a last resort
             // Needed at least by MESA 8.0.4 on Ubuntu 12.04.
             if (mContextProfile != CONTEXT_COMPATIBILITY) {
@@ -695,10 +594,9 @@ namespace Ogre
         // Restore the original error handler
         XSetErrorHandler( oldHandler );
 
-        if (ctxErrorOccurred || !glxContext) {
-          LogManager::getSingleton().logMessage(
-              "Failed to create an OpenGL context. " + ctxErrorMessage,
-              LML_CRITICAL);
+        if (ctxErrorOccurred || !glxContext)
+        {
+            LogManager::getSingleton().logError("Failed to create an OpenGL context - " + ctxErrorMessage);
         }
 
         return glxContext;

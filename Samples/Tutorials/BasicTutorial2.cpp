@@ -35,7 +35,6 @@ THE SOFTWARE
 #include "OgreApplicationContext.h"
 #include "OgreInput.h"
 #include "OgreRTShaderSystem.h"
-#include "OgreApplicationContext.h"
 #include "OgreCameraMan.h"
 
 using namespace Ogre;
@@ -107,6 +106,11 @@ void TutorialApplication::setup()
     cam->setAspectRatio(Real(vp->getActualWidth()) / Real(vp->getActualHeight()));
     //! [cameraratio]
 
+    //! [lightingsset]
+    scnMgr->setAmbientLight(ColourValue(0, 0, 0));
+    scnMgr->setShadowTechnique(ShadowTechnique::SHADOWTYPE_STENCIL_ADDITIVE);
+    //! [lightingsset]
+
     //! [ninja]
     Entity* ninjaEntity = scnMgr->createEntity("ninja.mesh");
     ninjaEntity->setCastShadows(true);
@@ -140,11 +144,6 @@ void TutorialApplication::setup()
     //! [planesetmat]
     groundEntity->setMaterialName("Examples/Rockwall");
     //! [planesetmat]
-
-    //! [lightingsset]
-    scnMgr->setAmbientLight(ColourValue(0, 0, 0));
-    scnMgr->setShadowTechnique(ShadowTechnique::SHADOWTYPE_STENCIL_MODULATIVE);
-    //! [lightingsset]
 
     //! [spotlight]
     Light* spotLight = scnMgr->createLight("SpotLight");

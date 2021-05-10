@@ -52,36 +52,18 @@ namespace Ogre {
           mCSAA(0)
     {
         // already handled by resize
-        //emscripten_set_fullscreenchange_callback(NULL, (void*)this, 1, &EmscriptenEGLWindow::fullscreenCallback);
-        emscripten_set_webglcontextlost_callback(NULL, (void*)this, 1, &EmscriptenEGLWindow::contextLostCallback);
-        emscripten_set_webglcontextrestored_callback(NULL, (void*)this, 1, &EmscriptenEGLWindow::contextRestoredCallback);
-        emscripten_set_resize_callback(NULL, (void*)this, 1, &EmscriptenEGLWindow::canvasWindowResized);
+        emscripten_set_fullscreenchange_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, (void*)this, 1, &EmscriptenEGLWindow::fullscreenCallback);
+        emscripten_set_webglcontextlost_callback("#canvas", (void*)this, 1, &EmscriptenEGLWindow::contextLostCallback);
+        emscripten_set_webglcontextrestored_callback("#canvas", (void*)this, 1, &EmscriptenEGLWindow::contextRestoredCallback);
+        emscripten_set_resize_callback("#canvas", (void*)this, 1, &EmscriptenEGLWindow::canvasWindowResized);
     }
 
     EmscriptenEGLWindow::~EmscriptenEGLWindow()
     {
-        emscripten_set_fullscreenchange_callback(NULL, NULL, 0, NULL);
-        emscripten_set_resize_callback(NULL, NULL, 0, NULL);
-        emscripten_set_webglcontextlost_callback(NULL, NULL, 0, NULL);
-        emscripten_set_webglcontextrestored_callback(NULL, NULL, 0, NULL);
-    }
-
-    void EmscriptenEGLWindow::getLeftAndTopFromNativeWindow( int & left, int & top, uint width, uint height )
-    {
-        // We don't have a native window, so return 0.
-        left = top = 0;
-    }
-
-    void EmscriptenEGLWindow::initNativeCreatedWindow(const NameValuePairList *miscParams)
-    {
-    }
-
-    void EmscriptenEGLWindow::createNativeWindow( int &left, int &top, uint &width, uint &height, String &title )
-    {
-    }
-
-    void EmscriptenEGLWindow::reposition( int left, int top )
-    {
+        emscripten_set_fullscreenchange_callback("#canvas", NULL, 0, NULL);
+        emscripten_set_resize_callback("#canvas", NULL, 0, NULL);
+        emscripten_set_webglcontextlost_callback("#canvas", NULL, 0, NULL);
+        emscripten_set_webglcontextrestored_callback("#canvas", NULL, 0, NULL);
     }
 
     void EmscriptenEGLWindow::resize(uint width, uint height)
@@ -91,6 +73,9 @@ namespace Ogre {
         
 
         EMSCRIPTEN_RESULT result = emscripten_set_canvas_element_size(mCanvasSelector.c_str(), width, height);
+        // This is a workaroud for issue: https://github.com/emscripten-core/emscripten/issues/3283.
+        // The setTimeout of 0 will ensure that this code is runs on the next JSEventLoop.
+        EM_ASM(setTimeout(function(){var canvas = document.getElementById('canvas'); canvas.width = $0; canvas.height = $1;}, 0), width, height);
         
         if(result < 0)
         {
@@ -183,7 +168,7 @@ namespace Ogre {
                 if (mMinBufferSize > mMaxBufferSize) mMinBufferSize = mMaxBufferSize;
             }
 
-            if((opt = miscParams->find("MSAA")) != end)
+            if((opt = miscParams->find("FSAA")) != end)
             {
                 mMSAA = Ogre::StringConverter::parseInt(opt->second);
             }
@@ -198,8 +183,6 @@ namespace Ogre {
                 mCanvasSelector = opt->second;
             }
         }
-        
-        initNativeCreatedWindow(miscParams);
         
         if (mEglSurface)
         {
@@ -227,7 +210,7 @@ namespace Ogre {
             mHwGamma = false;
         }
         
-        mContext = createEGLContext();
+        mContext = createEGLContext(eglContext);
         mContext->setCurrent();
         EMSCRIPTEN_RESULT result = emscripten_set_canvas_element_size(mCanvasSelector.c_str(), width, height);
         
@@ -240,7 +223,8 @@ namespace Ogre {
         
         mOldWidth = width;
         mOldHeight = height;
-        switchFullScreen(fullScreen);
+        if(fullScreen)
+            switchFullScreen(true);
         
         EGL_CHECK_ERROR
 
@@ -268,7 +252,7 @@ namespace Ogre {
         mContext->setCurrent();
         
         static_cast<GLRenderSystemCommon*>(Root::getSingleton().getRenderSystem())->notifyOnContextLost();
-        mContext->_destroyInternalResources();
+        static_cast<EGLContext*>(mContext)->_destroyInternalResources();
         
         eglDestroySurface(mEglDisplay, mEglSurface);
         EGL_CHECK_ERROR
@@ -375,7 +359,7 @@ namespace Ogre {
             mVisible = true;
             mClosed = false;
             
-            mContext->_createInternalResources(mEglDisplay, mEglConfig, mEglSurface, nullptr);
+            static_cast<EGLContext*>(mContext)->_createInternalResources(mEglDisplay, mEglConfig, mEglSurface, nullptr);
             
             static_cast<GLRenderSystemCommon*>(Ogre::Root::getSingleton().getRenderSystem())->resetRenderer(this);
         }

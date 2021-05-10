@@ -324,9 +324,14 @@ namespace Ogre {
         */
         const String& getCustomType() const;
 
-        void setThreadGroups(Vector3i g) { mThreadGroups = g; }
-        Vector3i getThreadGroups() { return mThreadGroups; }
+        void setThreadGroups(const Vector3i& g) { mThreadGroups = g; }
+        const Vector3i& getThreadGroups() const { return mThreadGroups; }
 
+        void setCameraName(const String& name) { mCameraName = name; }
+        const String& getCameraName() const { return mCameraName; }
+
+        void setAlignCameraToFace(bool val) { mAlignCameraToFace = val; }
+        bool getAlignCameraToFace() const { return mAlignCameraToFace; }
     private:
         /// Parent technique
         CompositionTargetPass *mParent;
@@ -354,17 +359,9 @@ namespace Ogre {
         /** Inputs (for material used for rendering the quad).
             An empty string signifies that no input is used */
         InputTex mInputs[OGRE_MAX_TEXTURE_LAYERS];
-        /// Stencil operation parameters
-        bool mStencilCheck;
-        CompareFunction mStencilFunc; 
-        uint32 mStencilRefValue;
-        uint32 mStencilMask;
-        StencilOperation mStencilFailOp;
-        StencilOperation mStencilDepthFailOp;
-        StencilOperation mStencilPassOp;
         Vector3i mThreadGroups;
-
-        bool mStencilTwoSidedOperation;
+        /// Stencil operation parameters
+        StencilState mStencilState;
         bool mStencilReadBackAsTexture;
 
         /// True if quad should not cover whole screen
@@ -375,6 +372,10 @@ namespace Ogre {
         bool mQuadFarCorners, mQuadFarCornersViewSpace;
         /// The type name of the custom composition pass.
         String mCustomType;
+
+        /// name of camera to use instead of default
+        String mCameraName;
+        bool mAlignCameraToFace;
     };
     /** @} */
     /** @} */

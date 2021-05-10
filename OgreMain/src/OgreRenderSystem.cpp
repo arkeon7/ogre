@@ -34,8 +34,8 @@ THE SOFTWARE.
 
 #include "OgreRenderTarget.h"
 #include "OgreDepthBuffer.h"
-#include "OgreIteratorWrappers.h"
 #include "OgreHardwareOcclusionQuery.h"
+#include "OgreComponents.h"
 
 #ifdef OGRE_BUILD_COMPONENT_RTSHADERSYSTEM
 #include "OgreRTShaderConfig.h"
@@ -59,6 +59,7 @@ namespace Ogre {
         , mFaceCount(0)
         , mVertexCount(0)
         , mInvertVertexWinding(false)
+        , mIsReverseDepthBufferEnabled(false)
         , mDisabledTexUnitsFrom(0)
         , mCurrentPassIterationCount(0)
         , mCurrentPassIterationNum(0)
@@ -85,6 +86,64 @@ namespace Ogre {
         mEventNames.push_back("RenderSystemCapabilitiesCreated");
     }
 
+    void RenderSystem::initFixedFunctionParams()
+    {
+        if(mFixedFunctionParams)
+            return;
+
+        GpuLogicalBufferStructPtr logicalBufferStruct(new GpuLogicalBufferStruct());
+        mFixedFunctionParams.reset(new GpuProgramParameters);
+        mFixedFunctionParams->_setLogicalIndexes(logicalBufferStruct);
+        mFixedFunctionParams->setAutoConstant(0, GpuProgramParameters::ACT_WORLD_MATRIX);
+        mFixedFunctionParams->setAutoConstant(4, GpuProgramParameters::ACT_VIEW_MATRIX);
+        mFixedFunctionParams->setAutoConstant(8, GpuProgramParameters::ACT_PROJECTION_MATRIX);
+        mFixedFunctionParams->setAutoConstant(12, GpuProgramParameters::ACT_SURFACE_AMBIENT_COLOUR);
+        mFixedFunctionParams->setAutoConstant(13, GpuProgramParameters::ACT_SURFACE_DIFFUSE_COLOUR);
+        mFixedFunctionParams->setAutoConstant(14, GpuProgramParameters::ACT_SURFACE_SPECULAR_COLOUR);
+        mFixedFunctionParams->setAutoConstant(15, GpuProgramParameters::ACT_SURFACE_EMISSIVE_COLOUR);
+        mFixedFunctionParams->setAutoConstant(16, GpuProgramParameters::ACT_SURFACE_SHININESS);
+        mFixedFunctionParams->setAutoConstant(17, GpuProgramParameters::ACT_POINT_PARAMS);
+        mFixedFunctionParams->setConstant(18, Vector4::ZERO); // ACT_FOG_PARAMS
+        mFixedFunctionParams->setConstant(19, Vector4::ZERO); // ACT_FOG_COLOUR
+        mFixedFunctionParams->setAutoConstant(20, GpuProgramParameters::ACT_AMBIENT_LIGHT_COLOUR);
+
+        // allocate per light parameters. slots 21..69
+        for(int i = 0; i < OGRE_MAX_SIMULTANEOUS_LIGHTS; i++)
+        {
+            size_t light_offset = 21 + i * 6;
+            mFixedFunctionParams->setConstant(light_offset + 0, Vector4::ZERO); // position
+            mFixedFunctionParams->setConstant(light_offset + 1, Vector4::ZERO); // direction
+            mFixedFunctionParams->setConstant(light_offset + 2, Vector4::ZERO); // diffuse
+            mFixedFunctionParams->setConstant(light_offset + 3, Vector4::ZERO); // specular
+            mFixedFunctionParams->setConstant(light_offset + 4, Vector4::ZERO); // attenuation
+            mFixedFunctionParams->setConstant(light_offset + 5, Vector4::ZERO); // spotlight
+        }
+    }
+
+    void RenderSystem::setFFPLightParams(size_t index, bool enabled)
+    {
+        if(!mFixedFunctionParams)
+            return;
+
+        size_t light_offset = 21 + 6 * index;
+        if (!enabled)
+        {
+            mFixedFunctionParams->clearAutoConstant(light_offset + 0);
+            mFixedFunctionParams->clearAutoConstant(light_offset + 1);
+            mFixedFunctionParams->clearAutoConstant(light_offset + 2);
+            mFixedFunctionParams->clearAutoConstant(light_offset + 3);
+            mFixedFunctionParams->clearAutoConstant(light_offset + 4);
+            mFixedFunctionParams->clearAutoConstant(light_offset + 5);
+            return;
+        }
+        mFixedFunctionParams->setAutoConstant(light_offset + 0, GpuProgramParameters::ACT_LIGHT_POSITION, index);
+        mFixedFunctionParams->setAutoConstant(light_offset + 1, GpuProgramParameters::ACT_LIGHT_DIRECTION, index);
+        mFixedFunctionParams->setAutoConstant(light_offset + 2, GpuProgramParameters::ACT_LIGHT_DIFFUSE_COLOUR, index);
+        mFixedFunctionParams->setAutoConstant(light_offset + 3, GpuProgramParameters::ACT_LIGHT_SPECULAR_COLOUR, index);
+        mFixedFunctionParams->setAutoConstant(light_offset + 4, GpuProgramParameters::ACT_LIGHT_ATTENUATION, index);
+        mFixedFunctionParams->setAutoConstant(light_offset + 5, GpuProgramParameters::ACT_SPOTLIGHT_PARAMS, index);
+    }
+
     //-----------------------------------------------------------------------
     RenderSystem::~RenderSystem()
     {
@@ -94,6 +153,90 @@ namespace Ogre {
         // Current capabilities managed externally
         mCurrentCapabilities = 0;
     }
+
+    RenderWindowDescription RenderSystem::getRenderWindowDescription() const
+    {
+        RenderWindowDescription ret;
+        auto& miscParams = ret.miscParams;
+
+        auto end = mOptions.end();
+
+        auto opt = mOptions.find("Full Screen");
+        if (opt == end)
+            OGRE_EXCEPT(Exception::ERR_INVALIDPARAMS, "Can't find 'Full Screen' option");
+
+        ret.useFullScreen = StringConverter::parseBool(opt->second.currentValue);
+
+        opt = mOptions.find("Video Mode");
+        if (opt == end)
+            OGRE_EXCEPT(Exception::ERR_INVALIDPARAMS, "Can't find 'Video Mode' option");
+
+        StringStream mode(opt->second.currentValue);
+        String token;
+
+        mode >> ret.width;
+        mode >> token; // 'x' as seperator between width and height
+        mode >> ret.height;
+
+        // backend specific options. Presence determined by getConfigOptions
+        mode >> token; // '@' as seperator between bpp on D3D
+        if(!mode.eof())
+        {
+            uint32 bpp;
+            mode >> bpp;
+            miscParams.emplace("colourDepth", std::to_string(bpp));
+        }
+
+        if((opt = mOptions.find("FSAA")) != end)
+        {
+            StringStream fsaaMode(opt->second.currentValue);
+            uint32_t fsaa;
+            fsaaMode >> fsaa;
+            miscParams.emplace("FSAA", std::to_string(fsaa));
+
+            // D3D specific
+            if(!fsaaMode.eof())
+            {
+                String hint;
+                fsaaMode >> hint;
+                miscParams.emplace("FSAAHint", hint);
+            }
+        }
+
+        if((opt = mOptions.find("VSync")) != end)
+            miscParams.emplace("vsync", opt->second.currentValue);
+
+        if((opt = mOptions.find("sRGB Gamma Conversion")) != end)
+            miscParams.emplace("gamma", opt->second.currentValue);
+
+        if((opt = mOptions.find("Colour Depth")) != end)
+            miscParams.emplace("colourDepth", opt->second.currentValue);
+
+        if((opt = mOptions.find("VSync Interval")) != end)
+            miscParams.emplace("vsyncInterval", opt->second.currentValue);
+
+        if((opt = mOptions.find("Display Frequency")) != end)
+            miscParams.emplace("displayFrequency", opt->second.currentValue);
+
+        if((opt = mOptions.find("Content Scaling Factor")) != end)
+            miscParams["contentScalingFactor"] = opt->second.currentValue;
+
+        if((opt = mOptions.find("Rendering Device")) != end)
+        {
+            // try to parse "Monitor-NN-"
+            auto start = opt->second.currentValue.find('-') + 1;
+            auto len = opt->second.currentValue.find('-', start) - start;
+            if(start != String::npos)
+                miscParams["monitorIndex"] = opt->second.currentValue.substr(start, len);
+        }
+
+#if OGRE_NO_QUAD_BUFFER_STEREO == 0
+        if((opt = mOptions.find("Stereo Mode")) != end)
+            miscParams["stereoMode"] = opt->second.currentValue;
+#endif
+        return ret;
+    }
+
     //-----------------------------------------------------------------------
     void RenderSystem::_initRenderTargets(void)
     {
@@ -124,6 +267,7 @@ namespace Ogre {
     //-----------------------------------------------------------------------
     void RenderSystem::_swapAllRenderTargetBuffers()
     {
+        OgreProfile("_swapAllRenderTargetBuffers");
         // Update all in order of priority
         // This ensures render-to-texture targets get updated before render windows
         RenderTargetPriorityMap::iterator itarg, itargend;
@@ -135,7 +279,7 @@ namespace Ogre {
         }
     }
     //-----------------------------------------------------------------------
-    RenderWindow* RenderSystem::_initialise(bool autoCreateWindow, const String& windowTitle)
+    void RenderSystem::_initialise()
     {
         // Have I been registered by call to Root::setRenderSystem?
         /** Don't do this anymore, just allow via Root
@@ -156,8 +300,6 @@ namespace Ogre {
         mTessellationHullProgramBound = false;
         mTessellationDomainProgramBound = false;
         mComputeProgramBound = false;
-
-        return 0;
     }
 
     //---------------------------------------------------------------------------------------------
@@ -175,6 +317,38 @@ namespace Ogre {
     }
 
     //---------------------------------------------------------------------------------------------
+    RenderWindow* RenderSystem::_createRenderWindow(const String& name, unsigned int width,
+                                                    unsigned int height, bool fullScreen,
+                                                    const NameValuePairList* miscParams)
+    {
+        if (mRenderTargets.find(name) != mRenderTargets.end())
+        {
+            OGRE_EXCEPT(Exception::ERR_INVALIDPARAMS, "Window with name '" + name + "' already exists");
+        }
+
+        // Log a message
+        StringStream ss;
+        ss << "RenderSystem::_createRenderWindow \"" << name << "\", " <<
+            width << "x" << height << " ";
+        if (fullScreen)
+            ss << "fullscreen ";
+        else
+            ss << "windowed ";
+
+        if (miscParams)
+        {
+            ss << " miscParams: ";
+            NameValuePairList::const_iterator it;
+            for (const auto& p : *miscParams)
+            {
+                ss << p.first << "=" << p.second << " ";
+            }
+        }
+        LogManager::getSingleton().logMessage(ss.str());
+
+        return NULL;
+    }
+
     bool RenderSystem::_createRenderWindows(const RenderWindowDescriptionList& renderWindowDescriptions, 
         RenderWindowList& createdWindows)
     {
@@ -229,6 +403,19 @@ namespace Ogre {
             }                   
         }
 
+        // Simply call _createRenderWindow in a loop.
+        for (const auto& curRenderWindowDescription : renderWindowDescriptions)
+        {
+            RenderWindow* curWindow = NULL;
+            curWindow = _createRenderWindow(curRenderWindowDescription.name,
+                                            curRenderWindowDescription.width,
+                                            curRenderWindowDescription.height,
+                                            curRenderWindowDescription.useFullScreen,
+                                            &curRenderWindowDescription.miscParams);
+
+            createdWindows.push_back(curWindow);
+        }
+
         return true;
     }
 
@@ -253,9 +440,8 @@ namespace Ogre {
     {
         assert( target.getPriority() < OGRE_NUM_RENDERTARGET_GROUPS );
 
-        mRenderTargets.insert( RenderTargetMap::value_type( target.getName(), &target ) );
-        mPrioritisedRenderTargets.insert(
-            RenderTargetPriorityMap::value_type(target.getPriority(), &target ));
+        mRenderTargets.emplace(target.getName(), &target);
+        mPrioritisedRenderTargets.emplace(target.getPriority(), &target);
     }
 
     //---------------------------------------------------------------------------------------------
@@ -435,9 +621,11 @@ namespace Ogre {
     void RenderSystem::_setTextureUnitFiltering(size_t unit, FilterOptions minFilter,
             FilterOptions magFilter, FilterOptions mipFilter)
     {
+        OGRE_IGNORE_DEPRECATED_BEGIN
         _setTextureUnitFiltering(unit, FT_MIN, minFilter);
         _setTextureUnitFiltering(unit, FT_MAG, magFilter);
         _setTextureUnitFiltering(unit, FT_MIP, mipFilter);
+        OGRE_IGNORE_DEPRECATED_END
     }
     //---------------------------------------------------------------------
     void RenderSystem::_cleanupDepthBuffers( bool bCleanManualBuffers )
@@ -463,6 +651,11 @@ namespace Ogre {
         }
 
         mDepthBufferPool.clear();
+    }
+    void RenderSystem::_beginFrame(void)
+    {
+        if (!mActiveViewport)
+            OGRE_EXCEPT(Exception::ERR_INVALID_STATE, "Cannot begin frame - no viewport selected.");
     }
     //-----------------------------------------------------------------------
     CullingMode RenderSystem::_getCullingMode(void) const
@@ -504,17 +697,18 @@ namespace Ogre {
                                                        "for RT: " + renderTarget->getName());
         }
     }
-    bool RenderSystem::getWBufferEnabled(void) const
+    //-----------------------------------------------------------------------
+    bool RenderSystem::isReverseDepthBufferEnabled() const
     {
-        return mCurrentCapabilities->hasCapability(RSC_WBUFFER);
+        return mIsReverseDepthBufferEnabled;
     }
     //-----------------------------------------------------------------------
-    void RenderSystem::setWBufferEnabled(bool enabled)
+    void RenderSystem::reinitialise()
     {
-        enabled ? mCurrentCapabilities->setCapability(RSC_WBUFFER)
-                : mCurrentCapabilities->unsetCapability(RSC_WBUFFER);
+        shutdown();
+        _initialise();
     }
-    //-----------------------------------------------------------------------
+
     void RenderSystem::shutdown(void)
     {
         // Remove occlusion queries
@@ -550,6 +744,23 @@ namespace Ogre {
 
         mPrioritisedRenderTargets.clear();
     }
+
+    void RenderSystem::_setProjectionMatrix(Matrix4 m)
+    {
+        if (!mFixedFunctionParams) return;
+
+        if (mActiveRenderTarget->requiresTextureFlipping())
+        {
+            // Invert transformed y
+            m[1][0] = -m[1][0];
+            m[1][1] = -m[1][1];
+            m[1][2] = -m[1][2];
+            m[1][3] = -m[1][3];
+        }
+
+        mFixedFunctionParams->setConstant(8, m);
+        applyFixedFunctionParams(mFixedFunctionParams, GPV_GLOBAL);
+    }
     //-----------------------------------------------------------------------
     void RenderSystem::_beginGeometryCount(void)
     {
@@ -570,12 +781,6 @@ namespace Ogre {
     unsigned int RenderSystem::_getVertexCount(void) const
     {
         return static_cast< unsigned int >( mVertexCount );
-    }
-    //-----------------------------------------------------------------------
-    void RenderSystem::convertColourValue(const ColourValue& colour, uint32* pDest)
-    {
-        *pDest = VertexElement::convertColourValue(colour, getColourVertexElementType());
-
     }
     //-----------------------------------------------------------------------
     void RenderSystem::_render(const RenderOperation& op)
@@ -637,26 +842,11 @@ namespace Ogre {
         return mInvertVertexWinding;
     }
     //---------------------------------------------------------------------
-    void RenderSystem::addClipPlane (const Plane &p)
-    {
-        mClipPlanes.push_back(p);
-        mClipPlanesDirty = true;
-    }
-    //---------------------------------------------------------------------
     void RenderSystem::setClipPlanes(const PlaneList& clipPlanes)
     {
         if (clipPlanes != mClipPlanes)
         {
             mClipPlanes = clipPlanes;
-            mClipPlanesDirty = true;
-        }
-    }
-    //---------------------------------------------------------------------
-    void RenderSystem::resetClipPlanes()
-    {
-        if (!mClipPlanes.empty())
-        {
-            mClipPlanes.clear();
             mClipPlanesDirty = true;
         }
     }
@@ -678,37 +868,47 @@ namespace Ogre {
         if (mCurrentPassIterationCount <= 1)
             return false;
 
+        // Update derived depth bias
+        if (mDerivedDepthBias)
+        {
+            _setDepthBias(mDerivedDepthBiasBase + mDerivedDepthBiasMultiplier * mCurrentPassIterationNum,
+                          mDerivedDepthBiasSlopeScale);
+        }
+
         --mCurrentPassIterationCount;
         ++mCurrentPassIterationNum;
+
+        const uint16 mask = GPV_PASS_ITERATION_NUMBER;
+
         if (mActiveVertexGpuProgramParameters)
         {
             mActiveVertexGpuProgramParameters->incPassIterationNumber();
-            bindGpuProgramPassIterationParameters(GPT_VERTEX_PROGRAM);
+            bindGpuProgramParameters(GPT_VERTEX_PROGRAM, mActiveVertexGpuProgramParameters, mask);
         }
         if (mActiveGeometryGpuProgramParameters)
         {
             mActiveGeometryGpuProgramParameters->incPassIterationNumber();
-            bindGpuProgramPassIterationParameters(GPT_GEOMETRY_PROGRAM);
+            bindGpuProgramParameters(GPT_GEOMETRY_PROGRAM, mActiveGeometryGpuProgramParameters, mask);
         }
         if (mActiveFragmentGpuProgramParameters)
         {
             mActiveFragmentGpuProgramParameters->incPassIterationNumber();
-            bindGpuProgramPassIterationParameters(GPT_FRAGMENT_PROGRAM);
+            bindGpuProgramParameters(GPT_FRAGMENT_PROGRAM, mActiveFragmentGpuProgramParameters, mask);
         }
         if (mActiveTessellationHullGpuProgramParameters)
         {
             mActiveTessellationHullGpuProgramParameters->incPassIterationNumber();
-            bindGpuProgramPassIterationParameters(GPT_HULL_PROGRAM);
+            bindGpuProgramParameters(GPT_HULL_PROGRAM, mActiveTessellationHullGpuProgramParameters, mask);
         }
         if (mActiveTessellationDomainGpuProgramParameters)
         {
             mActiveTessellationDomainGpuProgramParameters->incPassIterationNumber();
-            bindGpuProgramPassIterationParameters(GPT_DOMAIN_PROGRAM);
+            bindGpuProgramParameters(GPT_DOMAIN_PROGRAM, mActiveTessellationDomainGpuProgramParameters, mask);
         }
         if (mActiveComputeGpuProgramParameters)
         {
             mActiveComputeGpuProgramParameters->incPassIterationNumber();
-            bindGpuProgramPassIterationParameters(GPT_COMPUTE_PROGRAM);
+            bindGpuProgramParameters(GPT_COMPUTE_PROGRAM, mActiveComputeGpuProgramParameters, mask);
         }
         return true;
     }
@@ -931,6 +1131,16 @@ namespace Ogre {
         optVSync.currentValue = optVSync.possibleValues[1];
         mOptions[optVSync.name] = optVSync;
 
+        ConfigOption optVSyncInterval;
+        optVSyncInterval.name = "VSync Interval";
+        optVSyncInterval.immutable = false;
+        optVSyncInterval.possibleValues.push_back("1");
+        optVSyncInterval.possibleValues.push_back("2");
+        optVSyncInterval.possibleValues.push_back("3");
+        optVSyncInterval.possibleValues.push_back("4");
+        optVSyncInterval.currentValue = optVSyncInterval.possibleValues[0];
+        mOptions[optVSyncInterval.name] = optVSyncInterval;
+
         ConfigOption optSRGB;
         optSRGB.name = "sRGB Gamma Conversion";
         optSRGB.immutable = false;
@@ -950,5 +1160,23 @@ namespace Ogre {
         mOptions[optStereoMode.name] = optStereoMode;
 #endif
     }
+
+    CompareFunction RenderSystem::reverseCompareFunction(CompareFunction func)
+    {
+        switch(func)
+        {
+        default:
+            return func;
+        case CMPF_LESS:
+            return CMPF_GREATER;
+        case CMPF_LESS_EQUAL:
+            return CMPF_GREATER_EQUAL;
+        case CMPF_GREATER_EQUAL:
+            return CMPF_LESS_EQUAL;
+        case CMPF_GREATER:
+            return CMPF_LESS;
+        }
+    }
+
 }
 

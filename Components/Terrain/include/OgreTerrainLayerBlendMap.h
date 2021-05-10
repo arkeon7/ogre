@@ -32,6 +32,7 @@ THE SOFTWARE.
 #include "OgreTerrainPrerequisites.h"
 #include "OgreCommon.h"
 #include "OgreDataStream.h"
+#include "OgreImage.h"
 
 namespace Ogre
 {
@@ -48,7 +49,7 @@ namespace Ogre
     /** Class exposing an interface to a blend map for a given layer. 
     Each layer after the first layer in a terrain has a blend map which 
     expresses how it is alpha blended with the layers beneath. Internally, this
-    blend map is packed into one channel of an RGB or RGBA texture in
+    blend map is packed into one channel of an RGBA texture in
     order to use the smallest number of samplers, but this class allows
     a caller to manipulate the data more easily without worrying about
     this packing. Also, the values you use to interact with the blend map are
@@ -59,7 +60,6 @@ namespace Ogre
     */
     class _OgreTerrainExport TerrainLayerBlendMap : public TerrainAlloc
     {
-    protected:
         Terrain* mParent;
         uint8 mLayerIdx;
         uint8 mChannel; // RGBA
@@ -67,7 +67,7 @@ namespace Ogre
         Box mDirtyBox;
         bool mDirty;
         HardwarePixelBuffer* mBuffer;
-        float* mData;
+        Image mData;
 
         void download();
         void upload();

@@ -27,7 +27,7 @@ THE SOFTWARE.
 */
 #include "StringTests.h"
 #include "OgreStringConverter.h"
-#include "OgreVector3.h"
+#include "OgreVector.h"
 #include "OgreQuaternion.h"
 #include "OgreMatrix4.h"
 #include "OgreColourValue.h"
@@ -52,6 +52,18 @@ void StringTests::TearDown()
 {
 }
 //--------------------------------------------------------------------------
+TEST_F(StringTests,SplitBaseFilename)
+{
+    String base, ext;
+
+    StringUtil::splitBaseFilename("basename.ext", base, ext);
+    EXPECT_EQ("basename", base);
+    EXPECT_EQ("ext", ext);
+
+    StringUtil::splitBaseFilename("basename.", base, ext);
+    EXPECT_EQ("basename", base);
+    EXPECT_EQ("", ext);
+}
 TEST_F(StringTests,SplitFileNameNoPath)
 {
     String basename, path;

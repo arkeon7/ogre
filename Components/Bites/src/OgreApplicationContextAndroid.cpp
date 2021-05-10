@@ -25,7 +25,12 @@ NativeWindowPair ApplicationContextAndroid::createWindow(const Ogre::String& nam
     miscParams["androidConfig"] = Ogre::StringConverter::toString(reinterpret_cast<size_t>(mAConfig));
     miscParams["preserveContext"] = "true"; //Optionally preserve the gl context, prevents reloading all resources, this is false by default
 
-    mWindows[0].render = Ogre::Root::getSingleton().createRenderWindow(name, 0, 0, false, &miscParams);
+    auto p = mRoot->getRenderSystem()->getRenderWindowDescription();
+    miscParams.insert(p.miscParams.begin(), p.miscParams.end());
+    p.miscParams = miscParams;
+    p.name = name;
+
+    mWindows[0].render = mRoot->createRenderWindow(p);
     return mWindows[0];
 }
 
@@ -74,8 +79,8 @@ void ApplicationContextAndroid::_fireInputEventAndroid(AInputEvent* event, int w
         Ogre::RenderWindow* win = getRenderWindow();
 
         evt.tfinger.fingerId = AMotionEvent_getPointerId(event, 0);
-        evt.tfinger.x = AMotionEvent_getRawX(event, 0) / win->getWidth();
-        evt.tfinger.y = AMotionEvent_getRawY(event, 0) / win->getHeight();
+        evt.tfinger.x = AMotionEvent_getRawX(event, 0) / win->getWidth() * win->getViewPointToPixelScale();
+        evt.tfinger.y = AMotionEvent_getRawY(event, 0) / win->getHeight() * win->getViewPointToPixelScale();
 
         if(evt.type == FINGERMOTION) {
             if(evt.tfinger.fingerId != lastTouch.fingerId)
@@ -107,7 +112,6 @@ void ApplicationContextAndroid::locateResources()
 void ApplicationContextAndroid::shutdown()
 {
     ApplicationContextBase::shutdown();
-    mWindows.clear();
     AConfiguration_delete(mAConfig);
 }
 
@@ -117,6 +121,8 @@ void ApplicationContextAndroid::pollEvents()
     {
         Ogre::RenderWindow* win = it->render;
         win->windowMovedOrResized();
+        // it->native becomes invalid after surface change
+        // win->resize(w, h);
         windowResized(win);
     }
 }

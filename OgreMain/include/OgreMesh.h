@@ -103,7 +103,7 @@ namespace Ogre {
         typedef std::vector<SubMesh*> SubMeshList;
         typedef std::vector<unsigned short> IndexMap;
 
-    protected:
+    private:
         /** A list of submeshes which make up this mesh.
             Each mesh is made up of 1 or more submeshes, which
             are each based on a single material and can have their
@@ -124,7 +124,7 @@ namespace Ogre {
         typedef std::unordered_map<String, ushort> SubMeshNameMap ;
 
         
-    protected:
+    private:
 
         DataStreamPtr mFreshFromDisk;
 
@@ -362,6 +362,7 @@ namespace Ogre {
             update the bounds for you, because it cannot necessarily read vertex data back from 
             the vertex buffers which this mesh uses (they very well might be write-only, and even
             if they are not, reading data from a hardware buffer is a bottleneck).
+            @param bounds The axis-aligned bounding box for this mesh
             @param pad If true, a certain padding will be added to the bounding box to separate it from the mesh
         */
         void _setBounds(const AxisAlignedBox& bounds, bool pad = true);
@@ -473,9 +474,8 @@ namespace Ogre {
         void _notifySkeleton(SkeletonPtr& pSkel);
 
 
-        /** Gets an iterator for access all bone assignments. 
-        */
-        BoneAssignmentIterator getBoneAssignmentIterator(void);
+        /// @deprecated use getBoneAssignments
+        OGRE_DEPRECATED BoneAssignmentIterator getBoneAssignmentIterator(void);
 
         /** Gets a const reference to the list of bone assignments
         */
@@ -485,7 +485,7 @@ namespace Ogre {
         @remarks
             This number includes the original model.
         */
-        ushort getNumLodLevels(void) const;
+        ushort getNumLodLevels(void) const { return mNumLods; }
         /** Gets details of the numbered level of detail entry. */
         const MeshLodUsage& getLodLevel(ushort index) const;
 
@@ -933,18 +933,6 @@ namespace Ogre {
             0 means the shared vertex data, 1+ means a submesh vertex data (index+1)
         */
         VertexData* getVertexDataByTrackHandle(unsigned short handle);
-        /** Iterates through all submeshes and requests them 
-            to apply their texture aliases to the material they use.
-        @remarks
-            The submesh will only apply texture aliases to the material if matching
-            texture alias names are found in the material.  If a match is found, the
-            submesh will automatically clone the original material and then apply its
-            texture to the new material.
-        @par
-            This method is normally called by the protected method loadImpl when a 
-            mesh if first loaded.
-        */
-        void updateMaterialForAllSubMeshes(void);
 
         /** Internal method which, if animation types have not been determined,
             scans any vertex animations and determines the type for each set of
@@ -1016,7 +1004,7 @@ namespace Ogre {
 
         /** Value used by to determine when this LOD applies.
         @remarks
-            May be interpretted differently by different strategies.
+            May be interpreted differently by different strategies.
             Transformed from user-supplied values with LodStrategy::transformUserValue.
         */
         Real value;

@@ -52,21 +52,19 @@ namespace Ogre {
         int mMSAA;
         int mCSAA;
         bool mPreserveContext;
+        float mScale;
         
     protected:
-        virtual void getLeftAndTopFromNativeWindow(int & left, int & top, uint width, uint height);
-        virtual void initNativeCreatedWindow(const NameValuePairList *miscParams);
-        virtual void createNativeWindow( int &left, int &top, uint &width, uint &height, String &title );
-        virtual void reposition(int left, int top);
         virtual void resize(unsigned int width, unsigned int height);
         virtual void windowMovedOrResized();
-        virtual void switchFullScreen(bool fullscreen);
         
     public:
         AndroidEGLWindow(AndroidEGLSupport* glsupport);
         void create(const String& name, unsigned int width, unsigned int height,
                     bool fullScreen, const NameValuePairList *miscParams);
         
+        float getViewPointToPixelScale() { return mScale; }
+
         void _notifySurfaceDestroyed();
         void _notifySurfaceCreated(void* window, void* config);
     };

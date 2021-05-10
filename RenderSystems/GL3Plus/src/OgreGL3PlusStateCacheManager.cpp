@@ -104,11 +104,6 @@ namespace Ogre {
         mTexUnitsMap.clear();
         mTextureCoordGen.clear();
 
-        mViewport[0] = 0.0f;
-        mViewport[1] = 0.0f;
-        mViewport[2] = 0.0f;
-        mViewport[3] = 0.0f;
-
         mPointSize = 1.0f;
 
         mActiveDrawFrameBuffer=0;
@@ -160,23 +155,15 @@ namespace Ogre {
     void GL3PlusStateCacheManager::bindGLRenderBuffer(GLuint buffer, bool force)
     {
 #ifdef OGRE_ENABLE_STATE_CACHE
-        bool update = false;
-       
-        BindBufferMap::iterator i = mActiveBufferMap.find(GL_RENDERBUFFER);
-        if (i == mActiveBufferMap.end())
+        auto ret = mActiveBufferMap.emplace(GL_RENDERBUFFER, buffer);
+        if(ret.first->second != buffer || force) // Update the cached value if needed
         {
-            // Haven't cached this state yet.  Insert it into the map
-            mActiveBufferMap.insert(BindBufferMap::value_type(GL_RENDERBUFFER, buffer));
-            update = true;
-        }
-        else if((*i).second != buffer || force) // Update the cached value if needed
-        {
-            (*i).second = buffer;
-            update = true;
+            ret.first->second = buffer;
+            ret.second = true;
         }
 
         // Update GL
-        if(update)
+        if(ret.second)
 #endif
         {
             OGRE_CHECK_GL_ERROR(glBindRenderbuffer(GL_RENDERBUFFER, buffer));
@@ -186,23 +173,15 @@ namespace Ogre {
     void GL3PlusStateCacheManager::bindGLBuffer(GLenum target, GLuint buffer, bool force)
     {
 #ifdef OGRE_ENABLE_STATE_CACHE
-        bool update = false;
-       
-        BindBufferMap::iterator i = mActiveBufferMap.find(target);
-        if (i == mActiveBufferMap.end())
+        auto ret = mActiveBufferMap.emplace(target, buffer);
+        if(ret.first->second != buffer || force) // Update the cached value if needed
         {
-            // Haven't cached this state yet.  Insert it into the map
-            mActiveBufferMap.insert(BindBufferMap::value_type(target, buffer));
-            update = true;
-        }
-        else if((*i).second != buffer || force) // Update the cached value if needed
-        {
-            (*i).second = buffer;
-            update = true;
+            ret.first->second = buffer;
+            ret.second = true;
         }
 
         // Update GL
-        if(update)
+        if(ret.second)
 #endif
         {
             OGRE_CHECK_GL_ERROR(glBindBuffer(target, buffer));
@@ -312,25 +291,16 @@ namespace Ogre {
         
         // Get a local copy of the parameter map and search for this parameter
         TexParameteriMap &myMap = (*it).second.mTexParameteriMap;
-        TexParameteriMap::iterator i = myMap.find(pname);
-        
-        if (i == myMap.end())
+        auto ret = myMap.emplace(pname, param);
+        TexParameteriMap::iterator i = ret.first;
+
+        // Update the cached value if needed
+        if((*i).second != param || ret.second)
         {
-            // Haven't cached this state yet.  Insert it into the map
-            myMap.insert(TexParameteriMap::value_type(pname, param));
+            (*i).second = param;
+
             // Update GL
             OGRE_CHECK_GL_ERROR(glTexParameteri(target, pname, param));
-        }
-        else
-        {
-            // Update the cached value if needed
-            if((*i).second != param)
-            {
-                (*i).second = param;
-                
-                // Update GL
-                OGRE_CHECK_GL_ERROR(glTexParameteri(target, pname, param));
-            }
         }
 #else
         OGRE_CHECK_GL_ERROR(glTexParameteri(target, pname, param));
@@ -489,20 +459,14 @@ namespace Ogre {
         }
     }
 
-    void GL3PlusStateCacheManager::setViewport(GLint x, GLint y, GLsizei width, GLsizei height)
+    void GL3PlusStateCacheManager::setViewport(const Rect& r)
     {
 #ifdef OGRE_ENABLE_STATE_CACHE
-        if((mViewport[0] != x) ||
-           (mViewport[1] != y) ||
-           (mViewport[2] != width) ||
-           (mViewport[3] != height))
+        if(mViewport != r)
 #endif
         {
-            mViewport[0] = x;
-            mViewport[1] = y;
-            mViewport[2] = width;
-            mViewport[3] = height;
-            OGRE_CHECK_GL_ERROR(glViewport(x, y, width, height));
+            mViewport = r;
+            OGRE_CHECK_GL_ERROR(glViewport(r.left, r.top, r.width(), r.height()));
         }
     }
 

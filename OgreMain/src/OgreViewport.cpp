@@ -55,7 +55,7 @@ namespace Ogre {
         , mIsAutoUpdated(true)
 		, mColourBuffer(CBT_BACK)
     {           
-#if OGRE_COMPILER != OGRE_COMPILER_GCCE && OGRE_PLATFORM != OGRE_PLATFORM_ANDROID
+#if OGRE_PLATFORM != OGRE_PLATFORM_ANDROID
         LogManager::getSingleton().stream(LML_TRIVIAL)
             << "Creating viewport on target '" << target->getName() << "'"
             << ", rendering from camera '" << (cam != 0 ? cam->getName() : "NULL") << "'"
@@ -130,12 +130,10 @@ namespace Ogre {
 #endif
         }
 
-#if OGRE_COMPILER != OGRE_COMPILER_GCCE
         LogManager::getSingleton().stream(LML_TRIVIAL)
             << "Viewport for camera '" << (mCamera != 0 ? mCamera->getName() : "NULL") << "'"
             << ", actual dimensions "   << std::ios::fixed << std::setprecision(2) 
             << "L: " << mActLeft << " T: " << mActTop << " W: " << mActWidth << " H: " << mActHeight;
-#endif
 
          mUpdated = true;
 
@@ -217,7 +215,7 @@ namespace Ogre {
                 mCamera->_notifyViewport(this);
 
             // Tell Camera to render into me
-            mCamera->_renderScene(this, mShowOverlays);
+            mCamera->_renderScene(this);
         }
     }
     //---------------------------------------------------------------------
@@ -332,13 +330,17 @@ namespace Ogre {
         }
     }
     //---------------------------------------------------------------------
+    Rect Viewport::getActualDimensions() const
+    {
+        return Rect(mActLeft, mActTop, mActLeft + mActWidth, mActTop + mActHeight);
+    }
+
     void Viewport::getActualDimensions(int &left, int&top, int &width, int &height) const
     {
         left = mActLeft;
         top = mActTop;
         width = mActWidth;
         height = mActHeight;
-
     }
     //---------------------------------------------------------------------
     unsigned int Viewport::_getNumRenderedFaces(void) const

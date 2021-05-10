@@ -116,6 +116,10 @@ void Sample_Compositor::setupContent(void)
     compMgr.registerCompositorLogic("HDR", mCompositorLogics["HDR"]);
     compMgr.registerCompositorLogic("HeatVision", mCompositorLogics["HeatVision"]);
 
+#ifdef OGRE_BUILD_COMPONENT_RTSHADERSYSTEM
+    mShaderGenerator->createScheme("HDR"); // make sure HDR viewport is handled
+#endif
+
     createTextures();
     /// Create a couple of hard coded postfilter effects as an example of how to do it
     /// but the preferred method is to use compositor scripts.
@@ -132,6 +136,19 @@ void Sample_Compositor::setupContent(void)
 #endif
 }
 
+static bool blacklisted(const String& name)
+{
+    const char* blacklist[] = {"Ogre/Scene/", "DeferredShading", "SSAO", "TestMRT", "Compute", "Fresnel", "CubeMap"};
+
+    for(auto it : blacklist)
+    {
+        if(name.find(it) == 0)
+            return true;
+    }
+
+    return false;
+}
+
 void Sample_Compositor::registerCompositors(void)
 {
     Ogre::Viewport *vp = mViewport;
@@ -145,20 +162,9 @@ void Sample_Compositor::registerCompositors(void)
     {
         Ogre::ResourcePtr resource = resourceIterator.getNext();
         const Ogre::String& compositorName = resource->getName();
-        // Don't add base Ogre/Scene compositor to view
-        if (Ogre::StringUtil::startsWith(compositorName, "Ogre/Scene/", false))
-            continue;
-        // Don't add the deferred shading compositors, thats a different demo.
-        if (Ogre::StringUtil::startsWith(compositorName, "DeferredShading", false))
-            continue;
-        // Don't add the SSAO compositors, thats a different demo.
-        if (Ogre::StringUtil::startsWith(compositorName, "SSAO", false))
-            continue;
-        // Don't add the TestMRT compositor, it needs extra scene setup so doesn't currently work.
-        if (Ogre::StringUtil::startsWith(compositorName, "TestMRT", false))
-            continue;
-        // Don't add the Compute compositors, thats a different demo.
-        if (Ogre::StringUtil::startsWith(compositorName, "Compute", false))
+
+        // Don't add blacklisted compositor to view
+        if (blacklisted(compositorName))
             continue;
 
         mCompositorNames.push_back(compositorName);
@@ -397,12 +403,13 @@ void Sample_Compositor::setupScene(void)
     mSceneMgr->setAmbientLight(Ogre::ColourValue(0.3, 0.3, 0.2));
 
     Ogre::Light* l = mSceneMgr->createLight("Light2");
-    Ogre::Vector3 dir(-1,-1,0);
-    dir.normalise();
     l->setType(Ogre::Light::LT_DIRECTIONAL);
-    l->setDirection(dir);
     l->setDiffuseColour(1, 1, 0.8);
     l->setSpecularColour(1, 1, 1);
+
+    auto ln = mSceneMgr->getRootSceneNode()->createChildSceneNode();
+    ln->setDirection(Vector3(-1,-1,0).normalisedCopy());
+    ln->attachObject(l);
 
 
     Ogre::Entity* pEnt;

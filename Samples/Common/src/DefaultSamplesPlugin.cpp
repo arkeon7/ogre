@@ -26,6 +26,10 @@
  -----------------------------------------------------------------------------
  */
 #include "DefaultSamplesPlugin.h"
+
+#include "OgreComponents.h"
+
+#include "AtomicCounters.h"
 #include "BezierPatch.h"
 #include "BSP.h"
 #include "CameraTrack.h"
@@ -34,6 +38,7 @@
 #include "Compositor.h"
 #include "Compute.h"
 #include "CubeMapping.h"
+#include "CSMShadows.h"
 #include "DeferredShadingDemo.h"
 #include "Dot3Bump.h"
 #include "DualQuaternion.h"
@@ -48,13 +53,20 @@
 #ifdef OGRE_BUILD_COMPONENT_HLMS
 #   include "HLMS.h"
 #endif
+#ifdef HAVE_IMGUI
+#include "ImGuiDemo.h"
+#endif
 #include "Isosurf.h"
 #include "Lighting.h"
+#include "LightShafts.h"
 #include "MeshLod.h"
 #include "NewInstancing.h"
 #include "OceanDemo.h"
 #include "ParticleFX.h"
 #include "ParticleGS.h"
+#ifdef HAVE_PCZ_PLUGIN
+    #include "PCZTestApp.h"
+#endif
 #include "PBR.h"
 #include "PNTrianglesTessellation.h"
 #ifdef OGRE_BUILD_COMPONENT_RTSHADERSYSTEM
@@ -86,15 +98,20 @@ using namespace OgreBites;
 
 DefaultSamplesPlugin::DefaultSamplesPlugin() : SamplePlugin("DefaultSamplesPlugin")
 {
+    addSample(new Sample_AtomicCounters);
     addSample(new Sample_BezierPatch);
     addSample(new Sample_CameraTrack);
     addSample(new Sample_Character);
+    addSample(new CSMShadows);
 #if OGRE_PLATFORM != OGRE_PLATFORM_WINRT
     addSample(new Sample_DynTex);
     addSample(new Sample_FacialAnimation);
     addSample(new Sample_Grass);
     addSample(new Sample_DualQuaternion);
     addSample(new Sample_Isosurf);
+#ifdef HAVE_IMGUI
+    addSample(new Sample_ImGui);
+#endif
     addSample(new Sample_NewInstancing);
     addSample(new Sample_TextureArray);
     addSample(new Sample_Tessellation);
@@ -106,8 +123,12 @@ DefaultSamplesPlugin::DefaultSamplesPlugin() : SamplePlugin("DefaultSamplesPlugi
     addSample(new Sample_VolumeTex);
     addSample(new Sample_Shadows);
     addSample(new Sample_Lighting);
+    addSample(new Sample_LightShafts);
     addSample(new Sample_MeshLod);
     addSample(new Sample_ParticleFX);
+#ifdef HAVE_PCZ_PLUGIN
+    addSample(new Sample_PCZTest);
+#endif
     addSample(new Sample_ParticleGS);
     addSample(new Sample_Smoke);
 #endif // OGRE_PLATFORM_WINRT

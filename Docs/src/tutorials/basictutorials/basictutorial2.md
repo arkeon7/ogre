@@ -4,7 +4,7 @@
 
 This tutorial will expand on the use of Lights in a scene and using them to cast shadows.
 
-The full source for this tutorial (BasicTutorial2.cpp) can be found in samples directory **Samples/Tutorials**.
+The full source for this tutorial can be found in samples directory **Samples/Tutorials/BasicTutorial2.cpp**.
 
 @note Refer to @ref setup for instructions how set up an Ogre project and compile it successfully.
 
@@ -16,8 +16,8 @@ aerial cutscene. Just like a SceneNode the Camera's position will be relative to
 is not a SceneNode (it actually inherits from the Frustum class), but for movement and rotation, you can treat it
 like a SceneNode.
 
-@note Starting from version 1.10 functionality related to rotate and translate camera are deprecated. 
-You should attach camera to Ogre::SceneNode and do all transformation with this node.
+@note Starting from version 1.10, directly rotating and translating the camera is deprecated.
+You should attach the camera to a Ogre::SceneNode and do all transformation with this node.
 
 # Creating a Camera {#bt2CreatingaCamera}
 We will now cover camera creation part which we just applied in previous tutorial. We remeber that now we need to have SceneNode for camera. The first step will be doing is creating that SceneNode and asking the SceneManager to create a new Camera. Add the following to create SceneNode and Camera:
@@ -94,13 +94,13 @@ And finally we need to give our ground a material. For now, it will be easiest t
 Make sure you add the texture for the material and the Examples.material script to your resource loading path. In our case, the texture is called 'rockwall.tga'. You can find the name yourself by reading the entry in the material script.
 
 # Using Shadows in Ogre {#bt2UsingShadowsinOgre}
-Enabling shadows in Ogre is easy. The SceneManager class has a Ogre::SceneManager::setShadowTechnique method we can use. Then whenever we create an Entity, we call setCastShadows to choose which Entities will cast shadows. setShadowTechinique method takes several of different techniques. Refer to Ogre::ShadowTechnique for more details.
+Enabling shadows in Ogre is easy. The SceneManager class has a Ogre::SceneManager::setShadowTechnique method we can use. Then whenever we create an Entity, we call Ogre::Entity::setCastShadows to choose which ones will cast shadows. setShadowTechinique method takes several of different techniques. Refer to Ogre::ShadowTechnique for more details.
 
 Let's turn off the ambient light so we can see the full effect of our lights. Add the following changes:
 
 @snippet Samples/Tutorials/BasicTutorial2.cpp lightingsset
 
-Now the SceneManager will use modulative stencil shadows. Let's add some lights to see this in action.
+Now the SceneManager will use shadows. Let's add some lights to see this in action.
 
 # Lights {#bt2Lights}
 Ogre provides three types of lighting.

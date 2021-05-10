@@ -36,7 +36,7 @@ THE SOFTWARE.
 
 namespace Ogre {
 
-    const Real Quaternion::msEpsilon = 1e-03;
+    const float Quaternion::msEpsilon = 1e-03;
     const Quaternion Quaternion::ZERO(0,0,0,0);
     const Quaternion Quaternion::IDENTITY(1,0,0,0);
 
@@ -72,7 +72,7 @@ namespace Ogre {
             size_t k = s_iNext[j];
 
             fRoot = Math::Sqrt(kRot[i][i]-kRot[j][j]-kRot[k][k] + 1.0f);
-            Real* apkQuat[3] = { &x, &y, &z };
+            float* apkQuat[3] = { &x, &y, &z };
             *apkQuat[i] = 0.5f*fRoot;
             fRoot = 0.5f/fRoot;
             w = (kRot[k][j]-kRot[j][k])*fRoot;
@@ -116,7 +116,7 @@ namespace Ogre {
         //   q = cos(A/2)+sin(A/2)*(x*i+y*j+z*k)
 
         Radian fHalfAngle ( 0.5*rfAngle );
-        Real fSin = Math::Sin(fHalfAngle);
+        float fSin = Math::Sin(fHalfAngle);
         w = Math::Cos(fHalfAngle);
         x = fSin*rkAxis.x;
         y = fSin*rkAxis.y;
@@ -271,32 +271,6 @@ namespace Ogre {
         );
     }
     //-----------------------------------------------------------------------
-    Quaternion Quaternion::operator* (Real fScalar) const
-    {
-        return Quaternion(fScalar*w,fScalar*x,fScalar*y,fScalar*z);
-    }
-    //-----------------------------------------------------------------------
-    Quaternion operator* (Real fScalar, const Quaternion& rkQ)
-    {
-        return Quaternion(fScalar*rkQ.w,fScalar*rkQ.x,fScalar*rkQ.y,
-            fScalar*rkQ.z);
-    }
-    //-----------------------------------------------------------------------
-    Quaternion Quaternion::operator- () const
-    {
-        return Quaternion(-w,-x,-y,-z);
-    }
-    //-----------------------------------------------------------------------
-    Real Quaternion::Dot (const Quaternion& rkQ) const
-    {
-        return w*rkQ.w+x*rkQ.x+y*rkQ.y+z*rkQ.z;
-    }
-    //-----------------------------------------------------------------------
-    Real Quaternion::Norm () const
-    {
-        return Math::Sqrt(w * w + x * x + y * y + z * z);
-    }
-    //-----------------------------------------------------------------------
     Quaternion Quaternion::Inverse () const
     {
         Real fNorm = w*w+x*x+y*y+z*z;
@@ -325,15 +299,15 @@ namespace Ogre {
         // use exp(q) = e^w(cos(A)+(x*i+y*j+z*k)) since sin(A)/A has limit 1.
 
         Radian fAngle ( Math::Sqrt(x*x+y*y+z*z) );
-        Real fSin = Math::Sin(fAngle);
-		Real fExpW = Math::Exp(w);
+        float fSin = Math::Sin(fAngle);
+		float fExpW = Math::Exp(w);
 
         Quaternion kResult;
         kResult.w = fExpW*Math::Cos(fAngle);
 
         if ( Math::Abs(fAngle.valueRadians()) >= msEpsilon )
         {
-            Real fCoeff = fExpW*(fSin/(fAngle.valueRadians()));
+            float fCoeff = fExpW*(fSin/(fAngle.valueRadians()));
             kResult.x = fCoeff*x;
             kResult.y = fCoeff*y;
             kResult.z = fCoeff*z;
@@ -395,14 +369,6 @@ namespace Ogre {
 		return v + uv + uuv;
 
     }
-    //-----------------------------------------------------------------------
-	bool Quaternion::equals(const Quaternion& rhs, const Radian& tolerance) const
-	{
-        Real d = Dot(rhs);
-        Radian angle = Math::ACos(2.0f * d*d - 1.0f);
-
-		return Math::Abs(angle.valueRadians()) <= tolerance.valueRadians();
-	}
     //-----------------------------------------------------------------------
     Quaternion Quaternion::Slerp (Real fT, const Quaternion& rkP,
         const Quaternion& rkQ, bool shortestPath)
@@ -488,14 +454,6 @@ namespace Ogre {
         Quaternion kSlerpP = Slerp(fT, rkP, rkQ, shortestPath);
         Quaternion kSlerpQ = Slerp(fT, rkA, rkB);
         return Slerp(fSlerpT, kSlerpP ,kSlerpQ);
-    }
-    //-----------------------------------------------------------------------
-    Real Quaternion::normalise(void)
-    {
-        Real len = Norm();
-        Real factor = 1.0f / len;
-        *this = *this * factor;
-        return len;
     }
     //-----------------------------------------------------------------------
 	Radian Quaternion::getRoll(bool reprojectAxis) const

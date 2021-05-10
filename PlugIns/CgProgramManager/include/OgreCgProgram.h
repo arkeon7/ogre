@@ -158,7 +158,7 @@ namespace Ogre {
         bool isMorphAnimationIncluded(void) const;
         bool isPoseAnimationIncluded(void) const;
         bool isVertexTextureFetchRequired(void) const;
-        GpuProgramParametersSharedPtr getDefaultParameters(void);
+        const GpuProgramParametersPtr& getDefaultParameters(void) override;
         bool hasDefaultParameters(void) const;
         bool getPassSurfaceAndLightStates(void) const;
         bool getPassFogStates(void) const;
@@ -167,9 +167,6 @@ namespace Ogre {
         void resetCompileError(void);
         size_t getSize(void) const;
         void touch(void);
-
-        /// Scan the file for \#include and replace with source from the OGRE resources
-        static String resolveCgIncludes(const String& source, Resource* resourceBeingLoaded, const String& fileName);
     };
     /** @} */
     /** @} */

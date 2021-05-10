@@ -35,13 +35,143 @@ THE SOFTWARE.
 #include "OgreLogManager.h"
 
 #include "OgreGLSLProgram.h"
-#include "OgreGLSLGpuProgram.h"
 #include "OgreGLSLExtSupport.h"
 #include "OgreGLSLLinkProgramManager.h"
 #include "OgreGLSLPreprocessor.h"
 
 namespace Ogre {
     namespace GLSL {
+    //-----------------------------------------------------------------------
+    static RenderOperation::OperationType parseOperationType(const String& val)
+    {
+        if (val == "point_list")
+        {
+            return RenderOperation::OT_POINT_LIST;
+        }
+        else if (val == "line_list")
+        {
+            return RenderOperation::OT_LINE_LIST;
+        }
+        else if (val == "line_list_adj")
+        {
+            return RenderOperation::OT_LINE_LIST_ADJ;
+        }
+        else if (val == "line_strip")
+        {
+            return RenderOperation::OT_LINE_STRIP;
+        }
+        else if (val == "line_strip_adj")
+        {
+            return RenderOperation::OT_LINE_STRIP_ADJ;
+        }
+        else if (val == "triangle_strip")
+        {
+            return RenderOperation::OT_TRIANGLE_STRIP;
+        }
+        else if (val == "triangle_strip_adj")
+        {
+            return RenderOperation::OT_TRIANGLE_STRIP_ADJ;
+        }
+        else if (val == "triangle_fan")
+        {
+            return RenderOperation::OT_TRIANGLE_FAN;
+        }
+        else if (val == "triangle_list_adj")
+        {
+            return RenderOperation::OT_TRIANGLE_LIST_ADJ;
+        }
+        else
+        {
+            //Triangle list is the default fallback. Keep it this way?
+            return RenderOperation::OT_TRIANGLE_LIST;
+        }
+    }
+    //-----------------------------------------------------------------------
+    static const char* operationTypeToString(RenderOperation::OperationType val)
+    {
+        switch (val)
+        {
+        case RenderOperation::OT_POINT_LIST:
+            return "point_list";
+            break;
+        case RenderOperation::OT_LINE_LIST:
+            return "line_list";
+            break;
+        case RenderOperation::OT_LINE_LIST_ADJ:
+            return "line_list_adj";
+            break;
+        case RenderOperation::OT_LINE_STRIP:
+            return "line_strip";
+            break;
+        case RenderOperation::OT_LINE_STRIP_ADJ:
+            return "line_strip_adj";
+            break;
+        case RenderOperation::OT_TRIANGLE_STRIP:
+            return "triangle_strip";
+            break;
+        case RenderOperation::OT_TRIANGLE_STRIP_ADJ:
+            return "triangle_strip_adj";
+            break;
+        case RenderOperation::OT_TRIANGLE_FAN:
+            return "triangle_fan";
+            break;
+        case RenderOperation::OT_TRIANGLE_LIST_ADJ:
+            return "triangle_list_adj";
+            break;
+        case RenderOperation::OT_TRIANGLE_LIST:
+        default:
+            return "triangle_list";
+            break;
+        }
+    }
+    /// Command object for setting the input operation type (geometry shader only)
+    class CmdInputOperationType : public ParamCommand
+    {
+    public:
+        String doGet(const void* target) const
+        {
+            const GLSLProgram* t = static_cast<const GLSLProgram*>(target);
+            return operationTypeToString(t->getInputOperationType());
+        }
+        void doSet(void* target, const String& val)
+        {
+            GLSLProgram* t = static_cast<GLSLProgram*>(target);
+            t->setInputOperationType(parseOperationType(val));
+        }
+    };
+    /// Command object for setting the output operation type (geometry shader only)
+    class CmdOutputOperationType : public ParamCommand
+    {
+    public:
+        String doGet(const void* target) const
+        {
+            const GLSLProgram* t = static_cast<const GLSLProgram*>(target);
+            return operationTypeToString(t->getOutputOperationType());
+        }
+        void doSet(void* target, const String& val)
+        {
+            GLSLProgram* t = static_cast<GLSLProgram*>(target);
+            t->setOutputOperationType(parseOperationType(val));
+        }
+    };
+    /// Command object for setting the maximum output vertices (geometry shader only)
+    class CmdMaxOutputVertices : public ParamCommand
+    {
+    public:
+        String doGet(const void* target) const
+        {
+            const GLSLProgram* t = static_cast<const GLSLProgram*>(target);
+            return StringConverter::toString(t->getMaxOutputVertices());
+        }
+        void doSet(void* target, const String& val)
+        {
+            GLSLProgram* t = static_cast<GLSLProgram*>(target);
+            t->setMaxOutputVertices(StringConverter::parseInt(val));
+        }
+    };
+    static CmdInputOperationType msInputOperationTypeCmd;
+    static CmdOutputOperationType msOutputOperationTypeCmd;
+    static CmdMaxOutputVertices msMaxOutputVerticesCmd;
     //---------------------------------------------------------------------------
     GLSLProgram::~GLSLProgram()
     {
@@ -57,7 +187,7 @@ namespace Ogre {
         }
     }
     //---------------------------------------------------------------------------
-    bool GLSLProgram::compile(bool checkErrors)
+    void GLSLProgram::loadFromSource()
     {
         // only create a shader object if glsl is supported
         if (isSupported())
@@ -80,25 +210,22 @@ namespace Ogre {
             case GPT_HULL_PROGRAM:
                 break;
             }
-            mGLHandle = glCreateShaderObjectARB(shaderType);
+            mGLShaderHandle = glCreateShaderObjectARB(shaderType);
         }
 
         // Add preprocessor extras and main source
         if (!mSource.empty())
         {
             const char *source = mSource.c_str();
-            glShaderSourceARB(mGLHandle, 1, &source, NULL);
+            glShaderSourceARB(mGLShaderHandle, 1, &source, NULL);
         }
 
-        glCompileShaderARB(mGLHandle);
+        glCompileShaderARB(mGLShaderHandle);
         // check for compile errors
         int compiled = 0;
-        glGetObjectParameterivARB(mGLHandle, GL_OBJECT_COMPILE_STATUS_ARB, &compiled);
+        glGetObjectParameterivARB(mGLShaderHandle, GL_OBJECT_COMPILE_STATUS_ARB, &compiled);
 
-        if(!checkErrors)
-            return compiled == 1;
-
-        String compileInfo = getObjectInfo(mGLHandle);
+        String compileInfo = getObjectInfo(mGLShaderHandle);
 
         if (!compiled)
             OGRE_EXCEPT(Exception::ERR_RENDERINGAPI_ERROR, getResourceLogName() + " " + compileInfo, "compile");
@@ -106,36 +233,18 @@ namespace Ogre {
         // probably we have warnings
         if (!compileInfo.empty())
             LogManager::getSingleton().stream(LML_WARNING) << getResourceLogName() << " " << compileInfo;
-
-        return (compiled == 1);
-    }
-
-    //-----------------------------------------------------------------------
-    void GLSLProgram::createLowLevelImpl(void)
-    {
-        mAssemblerProgram = GpuProgramPtr(OGRE_NEW GLSLGpuProgram( this ));
-        // Shader params need to be forwarded to low level implementation
-        mAssemblerProgram->setAdjacencyInfoRequired(isAdjacencyInfoRequired());
     }
     //-----------------------------------------------------------------------
     void GLSLProgram::unloadHighLevelImpl(void)
     {
         if (isSupported())
         {
-            glDeleteObjectARB(mGLHandle);           
-            mGLHandle = 0;
+            glDeleteObjectARB(mGLShaderHandle);
+            mGLShaderHandle = 0;
 
             // destroy all programs using this shader
             GLSLLinkProgramManager::getSingletonPtr()->destroyAllByShader(this);
         }
-    }
-
-    //-----------------------------------------------------------------------
-    void GLSLProgram::populateParameterNames(GpuProgramParametersSharedPtr params)
-    {
-        getConstantDefinitions();
-        params->_setNamedConstants(mConstantDefs);
-        // Don't set logical / physical maps here, as we can't access parameters by logical index in GLHL.
     }
     //-----------------------------------------------------------------------
     void GLSLProgram::buildConstantDefinitions() const
@@ -146,6 +255,8 @@ namespace Ogre {
 
         // Therefore instead, parse the source code manually and extract the uniforms
         createParameterMappingStructures(true);
+        mLogicalToPhysical.reset();
+
         GLSLLinkProgramManager::getSingleton().extractUniformsFromGLSL(
             mSource, *mConstantDefs, mName);
 
@@ -166,7 +277,9 @@ namespace Ogre {
         const String& name, ResourceHandle handle,
         const String& group, bool isManual, ManualResourceLoader* loader)
         : GLSLShaderCommon(creator, name, handle, group, isManual, loader)
-        , mGLHandle(0)
+        , mInputOperationType(RenderOperation::OT_TRIANGLE_LIST)
+        , mOutputOperationType(RenderOperation::OT_TRIANGLE_LIST)
+        , mMaxOutputVertices(3)
     {
         // add parameter command "attach" to the material serializer dictionary
         if (createParamDictionary("GLSLProgram"))
@@ -174,9 +287,6 @@ namespace Ogre {
             setupBaseParamDictionary();
             ParamDictionary* dict = getParamDictionary();
 
-            dict->addParameter(ParameterDef("preprocessor_defines", 
-                "Preprocessor defines use to compile the program.",
-                PT_STRING),&msCmdPreprocessorDefines);
             dict->addParameter(ParameterDef("attach", 
                 "name of another GLSL program needed by this program",
                 PT_STRING),&msCmdAttach);
@@ -200,8 +310,7 @@ namespace Ogre {
                 "The maximum number of vertices a single run of this geometry program can output",
                 PT_INT),&msMaxOutputVerticesCmd);
         }
-        // Manually assign language now since we use it immediately
-        mSyntaxCode = "glsl";
+        mPassFFPStates = Root::getSingleton().getRenderSystem()->getCapabilities()->hasCapability(RSC_FIXED_FUNCTION);
     }
 
     //-----------------------------------------------------------------------
@@ -212,7 +321,7 @@ namespace Ogre {
         {
             childShader->attachToProgramObject(programObject);
         }
-        glAttachObjectARB( programObject, mGLHandle );
+        glAttachObjectARB( programObject, mGLShaderHandle );
         GLenum glErr = glGetError();
         if(glErr != GL_NO_ERROR)
         {
@@ -224,7 +333,7 @@ namespace Ogre {
     //-----------------------------------------------------------------------
     void GLSLProgram::detachFromProgramObject( const GLhandleARB programObject )
     {
-        glDetachObjectARB(programObject, mGLHandle);
+        glDetachObjectARB(programObject, mGLShaderHandle);
 
         GLenum glErr = glGetError();
         if(glErr != GL_NO_ERROR)
@@ -252,6 +361,48 @@ namespace Ogre {
 
         return language;
     }
+    //-----------------------------------------------------------------------------
+    void GLSLProgram::bindProgram(void)
+    {
+        // Tell the Link Program Manager what shader is to become active
+        GLSLLinkProgramManager::getSingleton().setActiveShader( mType, this );
+    }
+    //-----------------------------------------------------------------------------
+    void GLSLProgram::unbindProgram(void)
+    {
+        // Tell the Link Program Manager what shader is to become inactive
+        GLSLLinkProgramManager::getSingleton().setActiveShader( mType, NULL );
+    }
 
+    //-----------------------------------------------------------------------------
+    void GLSLProgram::bindProgramParameters(GpuProgramParametersSharedPtr params, uint16 mask)
+    {
+        // link can throw exceptions, ignore them at this point
+        try
+        {
+            // activate the link program object
+            GLSLLinkProgram* linkProgram = GLSLLinkProgramManager::getSingleton().getActiveLinkProgram();
+            // pass on parameters from params to program object uniforms
+            linkProgram->updateUniforms(params, mask, mType);
+        }
+        catch (Exception&) {}
+
+    }
+    //-----------------------------------------------------------------------------
+    bool GLSLProgram::isAttributeValid(VertexElementSemantic semantic, uint index)
+    {
+        // get link program - only call this in the context of bound program
+        GLSLLinkProgram* linkProgram = GLSLLinkProgramManager::getSingleton().getActiveLinkProgram();
+
+        if (linkProgram->isAttributeValid(semantic, index))
+        {
+            return true;
+        }
+        else
+        {
+            // fall back to default implementation, allow default bindings
+            return GLGpuProgramBase::isAttributeValid(semantic, index);
+        }
+    }
 }
 }

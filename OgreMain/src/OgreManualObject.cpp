@@ -35,16 +35,14 @@ namespace Ogre {
 #define TEMP_INITIAL_VERTEX_SIZE TEMP_VERTEXSIZE_GUESS * TEMP_INITIAL_SIZE
 #define TEMP_INITIAL_INDEX_SIZE sizeof(uint32) * TEMP_INITIAL_SIZE
     //-----------------------------------------------------------------------------
-    ManualObject::ManualObject(const String& name)
-        : MovableObject(name),
-          mDynamic(false), mCurrentSection(0), mCurrentUpdating(false), mFirstVertex(true),
-          mTempVertexPending(false),
-          mTempVertexBuffer(0), mTempVertexSize(TEMP_INITIAL_VERTEX_SIZE),
-          mTempIndexBuffer(0), mTempIndexSize(TEMP_INITIAL_INDEX_SIZE),
-          mDeclSize(0), mEstVertexCount(0), mEstIndexCount(0), mTexCoordIndex(0), 
-          mRadius(0), mAnyIndexed(false), mEdgeList(0), 
-          mUseIdentityProjection(false), mUseIdentityView(false), mKeepDeclarationOrder(false)
-    {
+ManualObject::ManualObject(const String& name)
+    : MovableObject(name), mBufferUsage(HardwareBuffer::HBU_STATIC_WRITE_ONLY), mCurrentSection(0),
+      mCurrentUpdating(false), mFirstVertex(true), mTempVertexPending(false), mTempVertexBuffer(0),
+      mTempVertexSize(TEMP_INITIAL_VERTEX_SIZE), mTempIndexBuffer(0),
+      mTempIndexSize(TEMP_INITIAL_INDEX_SIZE), mDeclSize(0), mEstVertexCount(0), mEstIndexCount(0),
+      mTexCoordIndex(0), mRadius(0), mAnyIndexed(false), mEdgeList(0), mUseIdentityProjection(false),
+      mUseIdentityView(false), mKeepDeclarationOrder(false)
+{
     }
     //-----------------------------------------------------------------------------
     ManualObject::~ManualObject()
@@ -139,7 +137,7 @@ namespace Ogre {
     }
     //-----------------------------------------------------------------------------
     void ManualObject::begin(const String& materialName,
-        RenderOperation::OperationType opType, const String & groupName)
+        RenderOperation::OperationType opType, const String& groupName)
     {
         if (mCurrentSection)
         {
@@ -151,17 +149,18 @@ namespace Ogre {
         // Check that a valid material was provided
         MaterialPtr material = MaterialManager::getSingleton().getByName(materialName, groupName);
 
-        if( !material )
+        if(!material)
         {
-            LogManager::getSingleton().logMessage("Can't assign material " + materialName +
+            LogManager::getSingleton().logError("Can't assign material " + materialName +
                                                   " to the ManualObject " + mName + " because this "
-                                                  "Material does not exist in group "+groupName+". Have you forgotten to define it in a "
-                                                  ".material script?", LML_CRITICAL);
+                                                  "Material does not exist in group " + groupName +
+                                                  ". Have you forgotten to define it in a "
+                                                  ".material script?");
 
             material = MaterialManager::getSingleton().getDefaultMaterial();
         }
 
-        mCurrentSection = OGRE_NEW ManualObjectSection(this, materialName, opType, groupName);
+        mCurrentSection = OGRE_NEW ManualObjectSection(this, material, opType);
         mCurrentUpdating = false;
         mCurrentSection->setUseIdentityProjection(mUseIdentityProjection);
         mCurrentSection->setUseIdentityView(mUseIdentityView);
@@ -169,6 +168,35 @@ namespace Ogre {
         mFirstVertex = true;
         mDeclSize = 0;
         mTexCoordIndex = 0;
+    }
+    //-----------------------------------------------------------------------------
+    void ManualObject::begin(const MaterialPtr& mat, RenderOperation::OperationType opType)
+    {
+      if (mCurrentSection)
+      {
+          OGRE_EXCEPT(Exception::ERR_INVALIDPARAMS,
+              "You cannot call begin() again until after you call end()",
+              "ManualObject::begin");
+      }
+
+      if (mat)
+      {
+          mCurrentSection = OGRE_NEW ManualObjectSection(this, mat, opType);
+      }
+      else
+      {
+          LogManager::getSingleton().logMessage("Can't assign null material", LML_CRITICAL);
+          const MaterialPtr defaultMat = MaterialManager::getSingleton().getDefaultMaterial();
+          mCurrentSection = OGRE_NEW ManualObjectSection(this, defaultMat, opType);
+      }
+
+      mCurrentUpdating = false;
+      mCurrentSection->setUseIdentityProjection(mUseIdentityProjection);
+      mCurrentSection->setUseIdentityView(mUseIdentityView);
+      mSectionList.push_back(mCurrentSection);
+      mFirstVertex = true;
+      mDeclSize = 0;
+      mTexCoordIndex = 0;
     }
     //-----------------------------------------------------------------------------
     void ManualObject::beginUpdate(size_t sectionIndex)
@@ -198,285 +226,13 @@ namespace Ogre {
         mDeclSize = rop->vertexData->vertexDeclaration->getVertexSize(0);
     }
     //-----------------------------------------------------------------------------
-    void ManualObject::position(const Vector3& pos)
+    void ManualObject::declareElement(VertexElementType t, VertexElementSemantic s)
     {
-        position(pos.x, pos.y, pos.z);
-    }
-    //-----------------------------------------------------------------------------
-    void ManualObject::position(float x, float y, float z)
-    {
-        if (!mCurrentSection)
-        {
-            OGRE_EXCEPT(Exception::ERR_INVALIDPARAMS,
-                "You must call begin() before this method",
-                "ManualObject::position");
-        }
-        if (mTempVertexPending)
-        {
-            // bake current vertex
-            copyTempVertexToBuffer();
-            mFirstVertex = false;
-        }
-
-        if (mFirstVertex && !mCurrentUpdating)
-        {
-            // defining declaration
-            mCurrentSection->getRenderOperation()->vertexData->vertexDeclaration
-                ->addElement(0, mDeclSize, VET_FLOAT3, VES_POSITION);
-            mDeclSize += VertexElement::getTypeSize(VET_FLOAT3);
-        }
-
-        mTempVertex.position.x = x;
-        mTempVertex.position.y = y;
-        mTempVertex.position.z = z;
-
-        // update bounds
-        mAABB.merge(mTempVertex.position);
-        mRadius = std::max(mRadius, mTempVertex.position.length());
-
-        // reset current texture coord
-        mTexCoordIndex = 0;
-
-        mTempVertexPending = true;
-    }
-    //-----------------------------------------------------------------------------
-    void ManualObject::normal(const Vector3& norm)
-    {
-        normal(norm.x, norm.y, norm.z);
-    }
-    //-----------------------------------------------------------------------------
-    void ManualObject::normal(float x, float y, float z)
-    {
-        if (!mCurrentSection)
-        {
-            OGRE_EXCEPT(Exception::ERR_INVALIDPARAMS,
-                "You must call begin() before this method",
-                "ManualObject::normal");
-        }
-        if (mFirstVertex && !mCurrentUpdating)
-        {
-            // defining declaration
-            mCurrentSection->getRenderOperation()->vertexData->vertexDeclaration
-                ->addElement(0, mDeclSize, VET_FLOAT3, VES_NORMAL);
-            mDeclSize += VertexElement::getTypeSize(VET_FLOAT3);
-        }
-        mTempVertex.normal.x = x;
-        mTempVertex.normal.y = y;
-        mTempVertex.normal.z = z;
-    }
-
-    //-----------------------------------------------------------------------------
-    void ManualObject::tangent(const Vector3& tan)
-    {
-        tangent(tan.x, tan.y, tan.z);
-    }
-    //-----------------------------------------------------------------------------
-    void ManualObject::tangent(float x, float y, float z)
-    {
-        if (!mCurrentSection)
-        {
-            OGRE_EXCEPT(Exception::ERR_INVALIDPARAMS,
-                "You must call begin() before this method",
-                "ManualObject::tangent");
-        }
-        if (mFirstVertex && !mCurrentUpdating)
-        {
-            // defining declaration
-            mCurrentSection->getRenderOperation()->vertexData->vertexDeclaration
-                ->addElement(0, mDeclSize, VET_FLOAT3, VES_TANGENT);
-            mDeclSize += VertexElement::getTypeSize(VET_FLOAT3);
-        }
-        mTempVertex.tangent.x = x;
-        mTempVertex.tangent.y = y;
-        mTempVertex.tangent.z = z;
-    }
-
-    //-----------------------------------------------------------------------------
-    void ManualObject::textureCoord(float u)
-    {
-        if (!mCurrentSection)
-        {
-            OGRE_EXCEPT(Exception::ERR_INVALIDPARAMS,
-                "You must call begin() before this method",
-                "ManualObject::textureCoord");
-        }
-        if (mFirstVertex && !mCurrentUpdating)
-        {
-            // defining declaration
-            mCurrentSection->getRenderOperation()->vertexData->vertexDeclaration
-                ->addElement(0, mDeclSize, VET_FLOAT1, VES_TEXTURE_COORDINATES, mTexCoordIndex);
-            mDeclSize += VertexElement::getTypeSize(VET_FLOAT1);
-        }
-        mTempVertex.texCoordDims[mTexCoordIndex] = 1;
-        mTempVertex.texCoord[mTexCoordIndex].x = u;
-
-        ++mTexCoordIndex;
-
-    }
-    //-----------------------------------------------------------------------------
-    void ManualObject::textureCoord(float u, float v)
-    {
-        if (!mCurrentSection)
-        {
-            OGRE_EXCEPT(Exception::ERR_INVALIDPARAMS,
-                "You must call begin() before this method",
-                "ManualObject::textureCoord");
-        }
-        if (mFirstVertex && !mCurrentUpdating)
-        {
-            // defining declaration
-            mCurrentSection->getRenderOperation()->vertexData->vertexDeclaration
-                ->addElement(0, mDeclSize, VET_FLOAT2, VES_TEXTURE_COORDINATES, mTexCoordIndex);
-            mDeclSize += VertexElement::getTypeSize(VET_FLOAT2);
-        }
-        mTempVertex.texCoordDims[mTexCoordIndex] = 2;
-        mTempVertex.texCoord[mTexCoordIndex].x = u;
-        mTempVertex.texCoord[mTexCoordIndex].y = v;
-
-        ++mTexCoordIndex;
-    }
-    //-----------------------------------------------------------------------------
-    void ManualObject::textureCoord(float u, float v, float w)
-    {
-        if (!mCurrentSection)
-        {
-            OGRE_EXCEPT(Exception::ERR_INVALIDPARAMS,
-                "You must call begin() before this method",
-                "ManualObject::textureCoord");
-        }
-        if (mFirstVertex && !mCurrentUpdating)
-        {
-            // defining declaration
-            mCurrentSection->getRenderOperation()->vertexData->vertexDeclaration
-                ->addElement(0, mDeclSize, VET_FLOAT3, VES_TEXTURE_COORDINATES, mTexCoordIndex);
-            mDeclSize += VertexElement::getTypeSize(VET_FLOAT3);
-        }
-        mTempVertex.texCoordDims[mTexCoordIndex] = 3;
-        mTempVertex.texCoord[mTexCoordIndex].x = u;
-        mTempVertex.texCoord[mTexCoordIndex].y = v;
-        mTempVertex.texCoord[mTexCoordIndex].z = w;
-
-        ++mTexCoordIndex;
-    }
-    //-----------------------------------------------------------------------------
-    void ManualObject::textureCoord(float x, float y, float z, float w)
-    {
-        if (!mCurrentSection)
-        {
-            OGRE_EXCEPT(Exception::ERR_INVALIDPARAMS,
-                "You must call begin() before this method",
-                "ManualObject::textureCoord");
-        }
-        if (mFirstVertex && !mCurrentUpdating)
-        {
-            // defining declaration
-            mCurrentSection->getRenderOperation()->vertexData->vertexDeclaration
-                ->addElement(0, mDeclSize, VET_FLOAT4, VES_TEXTURE_COORDINATES, mTexCoordIndex);
-            mDeclSize += VertexElement::getTypeSize(VET_FLOAT4);
-        }
-        mTempVertex.texCoordDims[mTexCoordIndex] = 4;
-        mTempVertex.texCoord[mTexCoordIndex].x = x;
-        mTempVertex.texCoord[mTexCoordIndex].y = y;
-        mTempVertex.texCoord[mTexCoordIndex].z = z;
-        mTempVertex.texCoord[mTexCoordIndex].w = w;
-
-        ++mTexCoordIndex;
-    }
-    //-----------------------------------------------------------------------------
-    void ManualObject::textureCoord(const Vector2& uv)
-    {
-        textureCoord(uv.x, uv.y);
-    }
-    //-----------------------------------------------------------------------------
-    void ManualObject::textureCoord(const Vector3& uvw)
-    {
-        textureCoord(uvw.x, uvw.y, uvw.z);
-    }
-    //---------------------------------------------------------------------
-    void ManualObject::textureCoord(const Vector4& xyzw)
-    {
-        textureCoord(xyzw.x, xyzw.y, xyzw.z, xyzw.w);
-    }
-    //-----------------------------------------------------------------------------
-    void ManualObject::colour(const ColourValue& col)
-    {
-        colour(col.r, col.g, col.b, col.a);
-    }
-    //-----------------------------------------------------------------------------
-    void ManualObject::colour(float r, float g, float b, float a)
-    {
-        if (!mCurrentSection)
-        {
-            OGRE_EXCEPT(Exception::ERR_INVALIDPARAMS,
-                "You must call begin() before this method",
-                "ManualObject::colour");
-        }
-        if (mFirstVertex && !mCurrentUpdating)
-        {
-            // defining declaration
-            mCurrentSection->getRenderOperation()->vertexData->vertexDeclaration
-                ->addElement(0, mDeclSize, VET_COLOUR, VES_DIFFUSE);
-            mDeclSize += VertexElement::getTypeSize(VET_COLOUR);
-        }
-        mTempVertex.colour.r = r;
-        mTempVertex.colour.g = g;
-        mTempVertex.colour.b = b;
-        mTempVertex.colour.a = a;
-
-    }
-    //-----------------------------------------------------------------------------
-    void ManualObject::index(uint32 idx)
-    {
-        if (!mCurrentSection)
-        {
-            OGRE_EXCEPT(Exception::ERR_INVALIDPARAMS,
-                "You must call begin() before this method",
-                "ManualObject::index");
-        }
-        mAnyIndexed = true;
-        if (idx >= 65536)
-            mCurrentSection->set32BitIndices(true);
-
-        // make sure we have index data
-        RenderOperation* rop = mCurrentSection->getRenderOperation();
-        if (!rop->indexData)
-        {
-            rop->indexData = OGRE_NEW IndexData();
-            rop->indexData->indexCount = 0;
-        }
-        rop->useIndexes = true;
-        resizeTempIndexBufferIfNeeded(++rop->indexData->indexCount);
-
-        mTempIndexBuffer[rop->indexData->indexCount - 1] = idx;
-    }
-    //-----------------------------------------------------------------------------
-    void ManualObject::triangle(uint32 i1, uint32 i2, uint32 i3)
-    {
-        if (!mCurrentSection)
-        {
-            OGRE_EXCEPT(Exception::ERR_INVALIDPARAMS,
-                "You must call begin() before this method",
-                "ManualObject::index");
-        }
-        if (mCurrentSection->getRenderOperation()->operationType !=
-            RenderOperation::OT_TRIANGLE_LIST)
-        {
-            OGRE_EXCEPT(Exception::ERR_INVALIDPARAMS,
-                "This method is only valid on triangle lists",
-                "ManualObject::index");
-        }
-
-        index(i1);
-        index(i2);
-        index(i3);
-    }
-    //-----------------------------------------------------------------------------
-    void ManualObject::quad(uint32 i1, uint32 i2, uint32 i3, uint32 i4)
-    {
-        // first tri
-        triangle(i1, i2, i3);
-        // second tri
-        triangle(i3, i4, i1);
+        // defining declaration
+        ushort idx = s == VES_TEXTURE_COORDINATES ? mTexCoordIndex : 0;
+        mDeclSize += mCurrentSection->getRenderOperation()
+                         ->vertexData->vertexDeclaration->addElement(0, mDeclSize, t, s, idx)
+                         .getSize();
     }
     //-----------------------------------------------------------------------------
     size_t ManualObject::getCurrentVertexCount() const
@@ -540,9 +296,7 @@ namespace Ogre {
                 OgreAssert(elem.getSemantic() != VES_DIFFUSE, "must use VET_COLOUR");
                 elem.baseVertexPointerToElement(pBase, &pFloat);
                 break;
-            case VET_COLOUR:
-            case VET_COLOUR_ABGR:
-            case VET_COLOUR_ARGB:
+            case VET_UBYTE4_NORM:
                 OgreAssert(elem.getSemantic() == VES_DIFFUSE, "must use VES_DIFFUSE");
                 elem.baseVertexPointerToElement(pBase, &pRGBA);
                 break;
@@ -551,8 +305,6 @@ namespace Ogre {
                 break;
             };
 
-
-            RenderSystem* rs;
             unsigned short dims;
             switch(elem.getSemantic())
             {
@@ -577,25 +329,7 @@ namespace Ogre {
                     *pFloat++ = mTempVertex.texCoord[elem.getIndex()][t];
                 break;
             case VES_DIFFUSE:
-                rs = Root::getSingleton().getRenderSystem();
-                if (rs)
-                {
-                    rs->convertColourValue(mTempVertex.colour, pRGBA++);
-                }
-                else
-                {
-                    switch(elem.getType())
-                    {
-                        case VET_COLOUR_ABGR:
-                            *pRGBA++ = mTempVertex.colour.getAsABGR();
-                            break;
-                        case VET_COLOUR_ARGB:
-                            *pRGBA++ = mTempVertex.colour.getAsARGB();
-                            break;
-                        default:
-                            *pRGBA++ = mTempVertex.colour.getAsRGBA();
-                    }
-                }
+                *pRGBA++ = mTempVertex.colour.getAsABGR();
                 break;
             default:
                 OgreAssert(false, "invalid semantic");
@@ -678,26 +412,17 @@ namespace Ogre {
                 // to allow for user-configured growth area
                 size_t vertexCount = std::max(rop->vertexData->vertexCount, 
                     mEstVertexCount);
-                vbuf =
-                    HardwareBufferManager::getSingleton().createVertexBuffer(
-                        mDeclSize,
-                        vertexCount,
-                        mDynamic? HardwareBuffer::HBU_DYNAMIC_WRITE_ONLY : 
-                            HardwareBuffer::HBU_STATIC_WRITE_ONLY);
+                vbuf = HardwareBufferManager::getSingleton().createVertexBuffer(mDeclSize, vertexCount,
+                                                                                mBufferUsage);
                 rop->vertexData->vertexBufferBinding->setBinding(0, vbuf);
             }
             if (ibufNeedsCreating)
             {
                 // Make the index buffer larger if estimated index count higher
                 // to allow for user-configured growth area
-                size_t indexCount = std::max(rop->indexData->indexCount, 
-                    mEstIndexCount);
-                rop->indexData->indexBuffer =
-                    HardwareBufferManager::getSingleton().createIndexBuffer(
-                        indexType,
-                        indexCount,
-                        mDynamic? HardwareBuffer::HBU_DYNAMIC_WRITE_ONLY : 
-                            HardwareBuffer::HBU_STATIC_WRITE_ONLY);
+                size_t indexCount = std::max(rop->indexData->indexCount, mEstIndexCount);
+                rop->indexData->indexBuffer = HardwareBufferManager::getSingleton().createIndexBuffer(
+                    indexType, indexCount, mBufferUsage);
             }
             // Write vertex data
             vbuf->writeData(
@@ -759,6 +484,18 @@ namespace Ogre {
 
     }
     //-----------------------------------------------------------------------------
+    void ManualObject::setMaterial(size_t subIndex, const MaterialPtr &mat)
+    {
+        if (subIndex >= mSectionList.size())
+        {
+            OGRE_EXCEPT(Exception::ERR_INVALIDPARAMS,
+                "Index out of bounds!",
+                "ManualObject::setMaterial");
+        }
+
+        mSectionList[subIndex]->setMaterial(mat);
+    }
+    //-----------------------------------------------------------------------------
     MeshPtr ManualObject::convertToMesh(const String& meshName, const String& groupName)
     {
         if (mCurrentSection)
@@ -776,25 +513,11 @@ namespace Ogre {
         }
         MeshPtr m = MeshManager::getSingleton().createManual(meshName, groupName);
 
-        for (SectionList::iterator i = mSectionList.begin(); i != mSectionList.end(); ++i)
+        for (auto sec : mSectionList)
         {
-            ManualObjectSection* sec = *i;
-            RenderOperation* rop = sec->getRenderOperation();
             SubMesh* sm = m->createSubMesh();
-            sm->useSharedVertices = false;
-            sm->operationType = rop->operationType;
-            sm->setMaterialName(sec->getMaterialName(), groupName);
-            // Copy vertex data; replicate buffers too
-            sm->vertexData = rop->vertexData->clone(true);
-            // Copy index data; replicate buffers too; delete the default, old one to avoid memory leaks
-
-            // check if index data is present
-            if (rop->indexData)
-            {
-                // Copy index data; replicate buffers too; delete the default, old one to avoid memory leaks
-                OGRE_DELETE sm->indexData;
-                sm->indexData = rop->indexData->clone(true);
-            }
+            sec->convertToSubMesh(sm);
+            sm->setMaterial(sec->getMaterial());
         }
         // update bounds
         m->_setBounds(mAABB);
@@ -803,8 +526,6 @@ namespace Ogre {
         m->load();
 
         return m;
-
-
     }
     //-----------------------------------------------------------------------------
     void ManualObject::setUseIdentityProjection(bool useIdentityProjection)
@@ -848,16 +569,6 @@ namespace Ogre {
     const String& ManualObject::getMovableType(void) const
     {
         return ManualObjectFactory::FACTORY_TYPE_NAME;
-    }
-    //-----------------------------------------------------------------------------
-    const AxisAlignedBox& ManualObject::getBoundingBox(void) const
-    {
-        return mAABB;
-    }
-    //-----------------------------------------------------------------------------
-    Real ManualObject::getBoundingRadius(void) const
-    {
-        return mRadius;
     }
     //-----------------------------------------------------------------------------
     void ManualObject::_updateRenderQueue(RenderQueue* queue)
@@ -924,14 +635,9 @@ namespace Ogre {
         }
         return mEdgeList;
     }
-    //---------------------------------------------------------------------
-    bool ManualObject::hasEdgeList()
-    {
-        return getEdgeList() != 0;
-    }
     //-----------------------------------------------------------------------------
-    ShadowCaster::ShadowRenderableListIterator
-    ManualObject::getShadowVolumeRenderableIterator(
+    const ShadowCaster::ShadowRenderableList&
+    ManualObject::getShadowVolumeRenderableList(
         ShadowTechnique shadowTechnique, const Light* light,
         HardwareIndexBufferSharedPtr* indexBuffer, size_t* indexBufferUsedSize,
         bool extrude, Real extrusionDistance, unsigned long flags)
@@ -941,8 +647,7 @@ namespace Ogre {
         EdgeData* edgeList = getEdgeList();
         if (!edgeList)
         {
-            return ShadowRenderableListIterator(
-                mShadowRenderables.begin(), mShadowRenderables.end());
+            return mShadowRenderables;
         }
 
         // Calculate the object space light details
@@ -1017,11 +722,7 @@ namespace Ogre {
         generateShadowVolume(edgeList, *indexBuffer, *indexBufferUsedSize, 
             light, mShadowRenderables, flags);
 
-
-        return ShadowRenderableListIterator(
-            mShadowRenderables.begin(), mShadowRenderables.end());
-
-
+        return mShadowRenderables;
     }
     //-----------------------------------------------------------------------------
     //-----------------------------------------------------------------------------
@@ -1036,7 +737,20 @@ namespace Ogre {
         mRenderOperation.useGlobalInstancingVertexBufferIsAvailable = false;
         mRenderOperation.vertexData = OGRE_NEW VertexData();
         mRenderOperation.vertexData->vertexCount = 0;
+    }
+    ManualObject::ManualObjectSection::ManualObjectSection(ManualObject* parent,
+        const MaterialPtr& mat, RenderOperation::OperationType opType)
+        : mParent(parent), mMaterial(mat), m32BitIndices(false)
+    {
+        assert(mMaterial);
+        mMaterialName = mMaterial->getName();
+        mGroupName = mMaterial->getGroup();
 
+        mRenderOperation.operationType = opType;
+        mRenderOperation.useIndexes = false;
+        mRenderOperation.useGlobalInstancingVertexBufferIsAvailable = false;
+        mRenderOperation.vertexData = OGRE_NEW VertexData();
+        mRenderOperation.vertexData->vertexCount = 0;
     }
     //-----------------------------------------------------------------------------
     ManualObject::ManualObjectSection::~ManualObjectSection()
@@ -1054,14 +768,13 @@ namespace Ogre {
     {
         if (!mMaterial)
         {
-            // Load from default group. If user wants to use alternate groups,
-            // they can define it and preload
             mMaterial = static_pointer_cast<Material>(MaterialManager::getSingleton().load(mMaterialName, mGroupName));
         }
         return mMaterial;
     }
     //-----------------------------------------------------------------------------
-    void ManualObject::ManualObjectSection::setMaterialName( const String& name, const String& groupName /* = ResourceGroupManager::AUTODETECT_RESOURCE_GROUP_NAME */)
+    void ManualObject::ManualObjectSection::setMaterialName(const String& name,
+        const String& groupName /* = ResourceGroupManager::AUTODETECT_RESOURCE_GROUP_NAME */)
     {
         if (mMaterialName != name || mGroupName != groupName)
         {
@@ -1069,6 +782,14 @@ namespace Ogre {
             mGroupName = groupName;
             mMaterial.reset();
         }
+    }
+    //-----------------------------------------------------------------------------
+    void ManualObject::ManualObjectSection::setMaterial(const MaterialPtr& mat)
+    {
+        assert(mat);
+        mMaterial = mat;
+        mMaterialName = mat->getName();
+        mGroupName = mat->getGroup();
     }
     //-----------------------------------------------------------------------------
     void ManualObject::ManualObjectSection::getRenderOperation(RenderOperation& op)
@@ -1085,8 +806,7 @@ namespace Ogre {
     Real ManualObject::ManualObjectSection::getSquaredViewDepth(const Ogre::Camera *cam) const
     {
         Node* n = mParent->getParentNode();
-        assert(n);
-        return n->getSquaredViewDepth(cam);
+        return n ? n->getSquaredViewDepth(cam) : 0;
     }
     //-----------------------------------------------------------------------------
     const LightList& ManualObject::ManualObjectSection::getLights(void) const
@@ -1094,6 +814,23 @@ namespace Ogre {
         return mParent->queryLights();
     }
     //-----------------------------------------------------------------------------
+    void ManualObject::ManualObjectSection::convertToSubMesh(SubMesh* sm) const
+    {
+        sm->useSharedVertices = false;
+        sm->operationType = mRenderOperation.operationType;
+        // Copy vertex data; replicate buffers too
+        sm->vertexData = mRenderOperation.vertexData->clone(true);
+
+        // Copy index data; replicate buffers too; delete the default, old one to avoid memory leaks
+
+        // check if index data is present
+        if (mRenderOperation.indexData)
+        {
+            // Copy index data; replicate buffers too; delete the default, old one to avoid memory leaks
+            OGRE_DELETE sm->indexData;
+            sm->indexData = mRenderOperation.indexData->clone(true);
+        }
+    }
     //--------------------------------------------------------------------------
     ManualObject::ManualObjectSectionShadowRenderable::ManualObjectSectionShadowRenderable(
         ManualObject* parent, HardwareIndexBufferSharedPtr* indexBuffer,
@@ -1177,12 +914,4 @@ namespace Ogre {
     {
         return OGRE_NEW ManualObject(name);
     }
-    //-----------------------------------------------------------------------------
-    void ManualObjectFactory::destroyInstance( MovableObject* obj)
-    {
-        OGRE_DELETE obj;
-    }
-
-
-
 }

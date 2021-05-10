@@ -89,9 +89,6 @@ void CGProgramWriter::initializeStringMaps()
 //-----------------------------------------------------------------------
 void CGProgramWriter::writeSourceCode(std::ostream& os, Program* program)
 {
-    const ShaderFunctionList& functionList = program->getFunctions();
-    ShaderFunctionConstIterator itFunction;
-
     const UniformParameterList& parameterList = program->getParameters();
     UniformParameterConstIterator itUniformParam = parameterList.begin();
 
@@ -114,39 +111,35 @@ void CGProgramWriter::writeSourceCode(std::ostream& os, Program* program)
     }
     os << std::endl;
 
-    // Write program function(s).
-    for (itFunction=functionList.begin(); itFunction != functionList.end(); ++itFunction)
+
+    Function* curFunction = program->getMain();
+
+    writeFunctionTitle(os, curFunction);
+    writeFunctionDeclaration(os, curFunction);
+
+    os << "{" << std::endl;
+
+    // Write local parameters.
+    const ShaderParameterList& localParams = curFunction->getLocalParameters();
+    ShaderParameterConstIterator itParam;
+
+    for (itParam=localParams.begin();  itParam != localParams.end(); ++itParam)
     {
-        Function* curFunction = *itFunction;
-
-        writeFunctionTitle(os, curFunction);
-        writeFunctionDeclaration(os, curFunction);
-
-        os << "{" << std::endl;
-
-        // Write local parameters.
-        const ShaderParameterList& localParams = curFunction->getLocalParameters();
-        ShaderParameterConstIterator itParam; 
-
-        for (itParam=localParams.begin();  itParam != localParams.end(); ++itParam)
-        {
-            os << "\t";
-            writeLocalParameter(os, *itParam);          
-            os << ";" << std::endl;                     
-        }
-
-        const FunctionAtomInstanceList& atomInstances = curFunction->getAtomInstances();
-        FunctionAtomInstanceConstIterator itAtom;
-
-        for (itAtom=atomInstances.begin(); itAtom != atomInstances.end(); ++itAtom)
-        {           
-            writeAtomInstance(os, *itAtom);
-        }
-
-
-        os << "}" << std::endl;
+        os << "\t";
+        writeLocalParameter(os, *itParam);
+        os << ";" << std::endl;
     }
 
+    const FunctionAtomInstanceList& atomInstances = curFunction->getAtomInstances();
+    FunctionAtomInstanceConstIterator itAtom;
+
+    for (itAtom=atomInstances.begin(); itAtom != atomInstances.end(); ++itAtom)
+    {
+        writeAtomInstance(os, *itAtom);
+    }
+
+
+    os << "}" << std::endl;
     os << std::endl;
 }
 
@@ -158,20 +151,22 @@ void CGProgramWriter::writeProgramDependencies(std::ostream& os, Program* progra
     os << "//                         PROGRAM DEPENDENCIES" << std::endl;
     os << "//-----------------------------------------------------------------------------" << std::endl;
 
+    os << "#include <OgreUnifiedShader.h>" << std::endl;
+
     const auto& rgm = ResourceGroupManager::getSingleton();
 
     for (unsigned int i=0; i < program->getDependencyCount(); ++i)
     {
-        String curDependency = program->getDependency(i) + "." + getTargetLanguage();
-        if (!rgm.resourceExists(ResourceGroupManager::DEFAULT_RESOURCE_GROUP_NAME, curDependency))
-            curDependency = program->getDependency(i) + ".cg"; // fall back to cg extension
+        String curDependency = program->getDependency(i) + ".cg";
+        if (!rgm.resourceExistsInAnyGroup(curDependency))
+            curDependency = program->getDependency(i) + ".glsl"; // fall back to glsl extension
 
         os << "#include \"" << curDependency << '\"' << std::endl;
     }
 }
 
 //-----------------------------------------------------------------------
-void CGProgramWriter::writeUniformParameter(std::ostream& os, UniformParameterPtr parameter)
+void CGProgramWriter::writeUniformParameter(std::ostream& os, const UniformParameterPtr& parameter)
 {
     os << mGpuConstTypeMap[parameter->getType()];
     os << "\t"; 

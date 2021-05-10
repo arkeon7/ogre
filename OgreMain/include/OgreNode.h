@@ -31,11 +31,12 @@ THE SOFTWARE.
 #include "OgrePrerequisites.h"
 
 #include "OgreMatrix4.h"
-#include "OgreRenderable.h"
 #include "OgreUserObjectBindings.h"
 #include "OgreHeaderPrefix.h"
 
 namespace Ogre {
+    template <typename T> class VectorIterator;
+    template <typename T> class ConstVectorIterator;
 
     /** \addtogroup Core
     *  @{
@@ -92,26 +93,6 @@ namespace Ogre {
             virtual void nodeAttached(const Node*) {}
             /** Node has been detached from a parent */
             virtual void nodeDetached(const Node*) {}
-        };
-
-        /** Inner class for displaying debug renderable for Node. */
-        class DebugRenderable : public Renderable, public NodeAlloc
-        {
-        protected:
-            Node* mParent;
-            MeshPtr mMeshPtr;
-            MaterialPtr mMat;
-            Real mScaling;
-        public:
-            DebugRenderable(Node* parent);
-            ~DebugRenderable();
-            const MaterialPtr& getMaterial(void) const;
-            void getRenderOperation(RenderOperation& op);
-            void getWorldTransforms(Matrix4* xform) const;
-            Real getSquaredViewDepth(const Camera* cam) const;
-            const LightList& getLights(void) const;
-            void setScaling(Real s) { mScaling = s; }
-
         };
 
     protected:
@@ -195,14 +176,7 @@ namespace Ogre {
             general sequence of updateFromParent (e.g. raising events)
         */
         virtual void updateFromParentImpl(void) const;
-
-
-        /** Internal method for creating a new child node - must be overridden per subclass. */
-        virtual Node* createChildImpl(void) = 0;
-
-        /** Internal method for creating a new child node - must be overridden per subclass. */
-        virtual Node* createChildImpl(const String& name) = 0;
-
+    private:
         /// The position to use as a base for keyframe animation
         Vector3 mInitialPosition;
         /// The orientation to use as a base for keyframe animation
@@ -213,19 +187,19 @@ namespace Ogre {
         /** Node listener - only one allowed (no list) for size & performance reasons. */
         Listener* mListener;
 
-        std::unique_ptr<DebugRenderable> mDebug;
-
         /// User objects binding.
         UserObjectBindings mUserObjectBindings;
 
         typedef std::vector<Node*> QueuedUpdates;
         static QueuedUpdates msQueuedUpdates;
 
+        /** Internal method for creating a new child node - must be overridden per subclass. */
+        virtual Node* createChildImpl(void) = 0;
+
+        /** Internal method for creating a new child node - must be overridden per subclass. */
+        virtual Node* createChildImpl(const String& name) = 0;
     public:
-        /** Constructor, should only be called by parent, not directly.
-        @remarks
-            Generates a name.
-        */
+        /// Constructor, should only be called by parent, not directly.
         Node();
         /** Constructor, should only be called by parent, not directly.
         @remarks
@@ -284,7 +258,7 @@ namespace Ogre {
         void setPosition(const Vector3& pos);
 
         /// @overload
-        void setPosition(Real x, Real y, Real z);
+        void setPosition(Real x, Real y, Real z) { setPosition(Vector3(x, y, z)); }
 
         /** Gets the position of the node relative to it's parent.
         */
@@ -305,7 +279,7 @@ namespace Ogre {
         void setScale(const Vector3& scale);
 
         /// @overload
-        void setScale(Real x, Real y, Real z);
+        void setScale(Real x, Real y, Real z) { setScale(Vector3(x, y, z)); }
 
         /** Gets the scaling factor of this node.
         */
@@ -386,7 +360,10 @@ namespace Ogre {
         */
         void translate(const Vector3& d, TransformSpace relativeTo = TS_PARENT);
         /// @overload
-        void translate(Real x, Real y, Real z, TransformSpace relativeTo = TS_PARENT);
+        void translate(Real x, Real y, Real z, TransformSpace relativeTo = TS_PARENT)
+        {
+            translate(Vector3(x, y, z), relativeTo);
+        }
         /** Moves the node along arbitrary axes.
         @remarks
             This method translates the node by a vector which is relative to
@@ -406,25 +383,43 @@ namespace Ogre {
         @param relativeTo
             The space which this transform is relative to.
         */
-        void translate(const Matrix3& axes, const Vector3& move, TransformSpace relativeTo = TS_PARENT);
+        void translate(const Matrix3& axes, const Vector3& move, TransformSpace relativeTo = TS_PARENT)
+        {
+            translate(axes * move, relativeTo);
+        }
         /// @overload
-        void translate(const Matrix3& axes, Real x, Real y, Real z, TransformSpace relativeTo = TS_PARENT);
+        void translate(const Matrix3& axes, Real x, Real y, Real z, TransformSpace relativeTo = TS_PARENT)
+        {
+            translate(axes, Vector3(x, y, z), relativeTo);
+        }
 
         /** Rotate the node around the Z-axis.
         */
-        virtual void roll(const Radian& angle, TransformSpace relativeTo = TS_LOCAL);
+        virtual void roll(const Radian& angle, TransformSpace relativeTo = TS_LOCAL)
+        {
+            rotate(Quaternion(angle, Vector3::UNIT_Z), relativeTo);
+        }
 
         /** Rotate the node around the X-axis.
         */
-        virtual void pitch(const Radian& angle, TransformSpace relativeTo = TS_LOCAL);
+        virtual void pitch(const Radian& angle, TransformSpace relativeTo = TS_LOCAL)
+        {
+            rotate(Quaternion(angle, Vector3::UNIT_X), relativeTo);
+        }
 
         /** Rotate the node around the Y-axis.
         */
-        virtual void yaw(const Radian& angle, TransformSpace relativeTo = TS_LOCAL);
+        virtual void yaw(const Radian& angle, TransformSpace relativeTo = TS_LOCAL)
+        {
+            rotate(Quaternion(angle, Vector3::UNIT_Y), relativeTo);
+        }
 
         /** Rotate the node around an arbitrary axis.
         */
-        void rotate(const Vector3& axis, const Radian& angle, TransformSpace relativeTo = TS_LOCAL);
+        void rotate(const Vector3& axis, const Radian& angle, TransformSpace relativeTo = TS_LOCAL)
+        {
+            rotate(Quaternion(angle, axis), relativeTo);
+        }
 
         /** Rotate the node around an aritrary axis using a Quarternion.
         */
@@ -448,6 +443,7 @@ namespace Ogre {
         @remarks
             This creates a child node with a given name, which allows you to look the node up from 
             the parent which holds this collection of nodes.
+        @param name Name of the Node to create
         @param translate
             Initial translation offset of child relative to parent
         @param rotate
@@ -477,21 +473,11 @@ namespace Ogre {
         */
         Node* getChild(const String& name) const;
 
-        /** Retrieves an iterator for efficiently looping through all children of this node.
-        @remarks
-            Using this is faster than repeatedly calling getChild if you want to go through
-            all (or most of) the children of this node.
-            Note that the returned iterator is only valid whilst no children are added or
-            removed from this node. Thus you should not store this returned iterator for
-            later use, nor should you add / remove children whilst iterating through it;
-            store up changes for later. Note that calling methods on returned items in 
-            the iterator IS allowed and does not invalidate the iterator.
-        @deprecated use getChildren()
-        */
-        ChildNodeIterator getChildIterator(void);
+        /// @deprecated use getChildren()
+        OGRE_DEPRECATED ChildNodeIterator getChildIterator(void);
 
-        /// @overload
-        ConstChildNodeIterator getChildIterator(void) const;
+        /// @deprecated use getChildren()
+        OGRE_DEPRECATED ConstChildNodeIterator getChildIterator(void) const;
 
         /// List of sub-nodes of this Node
         const ChildNodeMap& getChildren() const { return mChildren; }
@@ -639,16 +625,14 @@ namespace Ogre {
             parent, tell it anyway
         */
         virtual void needUpdate(bool forceParentUpdate = false);
-        /** Called by children to notify their parent that they need an update. 
+        /** Called by children to notify their parent that they need an update.
+        @param child The child Node to be updated
         @param forceParentUpdate Even if the node thinks it has already told it's
             parent, tell it anyway
         */
         void requestUpdate(Node* child, bool forceParentUpdate = false);
         /** Called by children to notify their parent that they no longer need an update. */
         void cancelUpdate(Node* child);
-
-        /** Get a debug renderable for rendering the Node.  */
-        DebugRenderable* getDebugRenderable(Real scaling);
 
         /** Queue a 'needUpdate' call to a node safely.
         @remarks

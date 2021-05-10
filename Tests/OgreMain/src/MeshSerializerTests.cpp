@@ -47,6 +47,7 @@ THE SOFTWARE.
 #include "OgreSkeleton.h"
 #include "OgreKeyFrame.h"
 
+#include <fstream>
 
 //#define I_HAVE_LOT_OF_FREE_TIME
 
@@ -380,11 +381,10 @@ void MeshSerializerTests::assertMeshClone(Mesh* a, Mesh* b, MeshVersion version 
         SubMesh* bSubmesh = b->getSubMesh(i);
 
         EXPECT_TRUE(aSubmesh->getMaterialName() == bSubmesh->getMaterialName());
-        EXPECT_TRUE(aSubmesh->isMatInitialised() == bSubmesh->isMatInitialised());
+        EXPECT_EQ(bool(aSubmesh->getMaterial()), bool(bSubmesh->getMaterial()));
         EXPECT_TRUE(aSubmesh->useSharedVertices == bSubmesh->useSharedVertices);
         EXPECT_TRUE(aSubmesh->getVertexAnimationIncludesNormals() == bSubmesh->getVertexAnimationIncludesNormals());
         EXPECT_TRUE(aSubmesh->getVertexAnimationType() == bSubmesh->getVertexAnimationType());
-        EXPECT_TRUE(aSubmesh->getTextureAliasCount() == bSubmesh->getTextureAliasCount());
         EXPECT_TRUE(isContainerClone(aSubmesh->blendIndexToBoneIndexMap, bSubmesh->blendIndexToBoneIndexMap));
         // TODO: Compare getBoneAssignments and getTextureAliases
         for (int n = 0; n < numLods; n++) {
@@ -620,7 +620,7 @@ void MeshSerializerTests::getResourceFullPath(const ResourcePtr& resource, Strin
     it = locPtr->begin();
     itEnd = locPtr->end();
     for (; it != itEnd; it++) {
-        if (stricmp(name.c_str(), it->filename.c_str()) == 0) {
+        if (StringUtil::startsWith(name, it->filename)) {
             info = &*it;
             break;
         }

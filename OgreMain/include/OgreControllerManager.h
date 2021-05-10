@@ -40,7 +40,7 @@ namespace Ogre {
     /** \addtogroup Core
     *  @{
     */
-    /** \addtogroup General
+    /** \addtogroup Animation
     *  @{
     */
 
@@ -55,7 +55,7 @@ namespace Ogre {
     */
     class _OgreExport ControllerManager : public Singleton<ControllerManager>, public ControllerAlloc
     {
-    protected:
+    private:
         typedef std::set<Controller<Real>*> ControllerList;
         ControllerList mControllers;
 

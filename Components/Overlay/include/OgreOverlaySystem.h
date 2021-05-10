@@ -32,10 +32,7 @@ THE SOFTWARE.
 #include "OgreOverlayPrerequisites.h"
 #include "OgreRenderQueueListener.h"
 #include "OgreRenderSystem.h"
-
-#if OGRE_PROFILING
 #include "OgreOverlayProfileSessionListener.h"
-#endif
 
 namespace Ogre {
     class OverlayManager;
@@ -57,7 +54,7 @@ namespace Ogre {
         instance as a RenderQueueListener in your scenemanager(s).
     */
     class _OgreOverlayExport OverlaySystem
-        : public OverlayAlloc
+        : public Singleton<OverlaySystem>
         , public Ogre::RenderQueueListener
         , public Ogre::RenderSystem::Listener
     {
@@ -72,13 +69,12 @@ namespace Ogre {
         /// @see RenderSystem::Listener
         virtual void eventOccurred(const String& eventName, const NameValuePairList* parameters);
 
+        static OverlaySystem& getSingleton();
+        static OverlaySystem* getSingletonPtr();
     private:
         OverlayManager* mOverlayManager;
         FontManager* mFontManager;
-
-#if OGRE_PROFILING
         OverlayProfileSessionListener* mProfileListener;
-#endif
     };
 
 }

@@ -42,7 +42,7 @@ namespace Ogre
     /** \addtogroup Core
     *  @{
     */
-    /** \addtogroup General
+    /** \addtogroup Script
     *  @{
     */
     /** These enums hold the types of the concrete parsed nodes */
@@ -202,7 +202,6 @@ namespace Ogre
             CE_DUPLICATEOVERRIDE,
             CE_UNEXPECTEDTOKEN,
             CE_OBJECTBASENOTFOUND,
-            CE_UNSUPPORTEDBYRENDERSYSTEM, //!< @deprecated do not use
             CE_REFERENCETOANONEXISTINGOBJECT,
             CE_DEPRECATEDSYMBOL
         };
@@ -220,10 +219,6 @@ namespace Ogre
         bool compile(const String &str, const String &source, const String &group);
         /// Compiles resources from the given concrete node list
         bool compile(const ConcreteNodeListPtr &nodes, const String &group);
-        /// Generates the AST from the given string script
-        AbstractNodeListPtr _generateAST(const String &str, const String &source, bool doImports = false, bool doObjects = false, bool doVariables = false);
-        /// Compiles the given abstract syntax tree
-        bool _compile(AbstractNodeListPtr nodes, const String &group, bool doImports = true, bool doObjects = true, bool doVariables = true);
         /// Adds the given error to the compiler's list of errors
         void addError(uint32 code, const String &file, int line, const String &msg = "");
         /// Sets the listener used by the compiler
@@ -270,7 +265,7 @@ namespace Ogre
         /// Handles processing the variables
         void processVariables(AbstractNodeList& nodes);
         /// This function overlays the given object on the destination object following inheritance rules
-        void overlayObject(const AbstractNode &source, ObjectAbstractNode& dest);
+        void overlayObject(const ObjectAbstractNode &source, ObjectAbstractNode& dest);
         /// Returns true if the given class is name excluded
         bool isNameExcluded(const ObjectAbstractNode& node, AbstractNode *parent);
         /// This function sets up the initial values in word id map
@@ -459,8 +454,8 @@ namespace Ogre
         static ScriptCompilerManager* getSingletonPtr(void);
     };
 
-    // Standard event types
-    class _OgreExport PreApplyTextureAliasesScriptCompilerEvent : public ScriptCompilerEvent
+    /// @deprecated do not use
+    class OGRE_DEPRECATED _OgreExport PreApplyTextureAliasesScriptCompilerEvent : public ScriptCompilerEvent
     {
     public:
         Material *mMaterial;
@@ -524,19 +519,8 @@ namespace Ogre
         {}  
     };
 
-    class _OgreExport CreateHighLevelGpuProgramScriptCompilerEvent : public ScriptCompilerEvent
-    {
-    public:
-        String mFile, mName, mResourceGroup, mSource, mLanguage;
-        GpuProgramType mProgramType;
-        static String eventType;
-
-        CreateHighLevelGpuProgramScriptCompilerEvent(const String &file, const String &name, const String &resourceGroup, const String &source, 
-            const String &language, GpuProgramType programType)
-            :ScriptCompilerEvent(eventType), mFile(file), mName(name), mResourceGroup(resourceGroup), mSource(source), 
-             mLanguage(language), mProgramType(programType)
-        {}  
-    };
+    /// @deprecated use CreateGpuProgramScriptCompilerEvent
+    typedef OGRE_DEPRECATED CreateGpuProgramScriptCompilerEvent CreateHighLevelGpuProgramScriptCompilerEvent;
 
     class _OgreExport CreateGpuSharedParametersScriptCompilerEvent : public ScriptCompilerEvent
     {
@@ -867,6 +851,9 @@ namespace Ogre
         ID_SAMPLER_REF,
         ID_THREAD_GROUPS,
         ID_RENDER_CUSTOM,
+        ID_AUTO,
+        ID_CAMERA,
+        ID_ALIGN_TO_FACE,
 
         ID_END_BUILTIN_IDS
     };

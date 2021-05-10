@@ -31,7 +31,7 @@ THE SOFTWARE.
 // Precompiler options
 #include "OgrePrerequisites.h"
 
-#include "OgreVector3.h"
+#include "OgreVector.h"
 #include "OgrePlane.h"
 
 namespace Ogre {
@@ -51,7 +51,7 @@ namespace Ogre {
     */
     class _OgreExport Sphere
     {
-    protected:
+    private:
         Real mRadius;
         Vector3 mCenter;
     public:

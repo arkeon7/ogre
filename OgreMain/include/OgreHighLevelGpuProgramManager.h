@@ -50,10 +50,10 @@ namespace Ogre {
         virtual ~HighLevelGpuProgramFactory();
         /// Get the name of the language this factory creates programs for
         virtual const String& getLanguage(void) const = 0;
-        virtual HighLevelGpuProgram* create(ResourceManager* creator, 
+        virtual GpuProgram* create(ResourceManager* creator,
             const String& name, ResourceHandle handle,
             const String& group, bool isManual, ManualResourceLoader* loader) = 0;
-        virtual void destroy(HighLevelGpuProgram* prog) = 0;
+        virtual void destroy(GpuProgram* prog) { delete prog; }
     };
 
     /** This ResourceManager manages high-level vertex and fragment programs. 
@@ -74,7 +74,7 @@ namespace Ogre {
     {
     public:
         typedef std::map<String, HighLevelGpuProgramFactory*> FactoryMap;
-    protected:
+    private:
         /// Factories capable of creating HighLevelGpuProgram instances
         FactoryMap mFactories;
 
@@ -98,11 +98,11 @@ namespace Ogre {
         void removeFactory(HighLevelGpuProgramFactory* factory);
 
         /** Returns whether a given high-level language is supported. */
-        bool isLanguageSupported(const String& lang);
+        bool isLanguageSupported(const String& lang) const;
 
         /// Get a resource by name
         /// @see ResourceManager::getResourceByName
-        HighLevelGpuProgramPtr getByName(const String& name, const String& groupName OGRE_RESOURCE_GROUP_INIT);
+        HighLevelGpuProgramPtr getByName(const String& name, const String& groupName OGRE_RESOURCE_GROUP_INIT) const;
 
         /** Create a new, unloaded HighLevelGpuProgram. 
         @par

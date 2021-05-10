@@ -54,10 +54,10 @@ namespace Ogre {
         mCustomProjMatrix(false),
         mFrustumExtentsManuallySet(false),
         mOrientationMode(OR_DEGREE_0),
-        mReflect(false), 
         mLinkedReflectPlane(0),
-        mObliqueDepthProjection(false), 
-        mLinkedObliqueProjPlane(0)
+        mLinkedObliqueProjPlane(0),
+        mReflect(false),
+        mObliqueDepthProjection(false)
     {
         // Initialise material
         mMaterial = MaterialManager::getSingleton().getDefaultMaterial(false);
@@ -314,13 +314,16 @@ namespace Ogre {
         {
             // Convert clipspace corners to camera space
             Matrix4 invProj = mProjMatrix.inverse();
-            Vector3 topLeft(-0.5f, 0.5f, 0.0f);
-            Vector3 bottomRight(0.5f, -0.5f, 0.0f);
+            Vector4 topLeft(-1.0f, 1.0f, -1.0f, 1.0f);
+            Vector4 bottomRight(1.0f, -1.0f, -1.0f, 1.0f);
 
             topLeft = invProj * topLeft;
             bottomRight = invProj * bottomRight;
 
-            return RealRect(topLeft.x, topLeft.y, bottomRight.x, bottomRight.y);
+            topLeft /= topLeft.w;
+            bottomRight /= bottomRight.w;
+
+            mExtents = RealRect(topLeft.x, topLeft.y, bottomRight.x, bottomRight.y);
         }
         else
         {
@@ -352,9 +355,9 @@ namespace Ogre {
 
                 mExtents = RealRect(-half_w, +half_h, +half_w, -half_h);
             }
-
-            return mExtents;
         }
+
+        return mExtents;
     }
     //-----------------------------------------------------------------------
     void Frustum::updateFrustumImpl(void) const
@@ -475,7 +478,6 @@ namespace Ogre {
         // Deal with orientation mode
         mProjMatrix = mProjMatrix * Quaternion(Degree(mOrientationMode * 90.f), Vector3::UNIT_Z);
 #endif
-
         RenderSystem* renderSystem = Root::getSingleton().getRenderSystem();
 
         if(renderSystem)
@@ -857,10 +859,10 @@ namespace Ogre {
     //-----------------------------------------------------------------------
     void Frustum::_updateRenderQueue(RenderQueue* queue)
     {
-        if (mDebugDisplay)
+        if (mDebugDisplay && mManager && mManager->getDebugDrawer())
         {
-            // Add self 
-            queue->addRenderable(this);
+            // Add self
+            mManager->getDebugDrawer()->drawFrustum(this);
         }
     }
     //-----------------------------------------------------------------------
@@ -941,7 +943,7 @@ namespace Ogre {
         mRecalcWorldSpaceCorners = true;
     }
     // -------------------------------------------------------------------
-    const Vector3* Frustum::getWorldSpaceCorners(void) const
+    const Frustum::Corners& Frustum::getWorldSpaceCorners(void) const
     {
         updateWorldSpaceCorners();
 

@@ -53,7 +53,8 @@ namespace Ogre {
     OverlayManager::OverlayManager() 
       : mLastViewportWidth(0), 
         mLastViewportHeight(0), 
-        mLastViewportOrientationMode(OR_DEGREE_0)
+        mLastViewportOrientationMode(OR_DEGREE_0),
+        mPixelRatio(1)
     {
 
         // Scripting is supported by this manager
@@ -144,6 +145,14 @@ namespace Ogre {
         }
 
     }
+
+    void OverlayManager::addOverlay(Overlay* overlay)
+    {
+        bool succ = mOverlayMap.emplace(overlay->getName(), overlay).second;
+        if(succ) return;
+        OGRE_EXCEPT(Exception::ERR_DUPLICATE_ITEM,
+                    "Overlay with name '" + overlay->getName() + "' already exists!");
+    }
     //---------------------------------------------------------------------
     void OverlayManager::destroy(const String& name)
     {
@@ -195,6 +204,14 @@ namespace Ogre {
     }
     void OverlayManager::parseScript(DataStreamPtr& stream, const String& groupName)
     {
+        // skip scripts that were already loaded as we lack proper re-loading support
+        if(!stream->getName().empty() && !mLoadedScripts.emplace(stream->getName()).second)
+        {
+            LogManager::getSingleton().logWarning(
+                StringUtil::format("Skipping loading '%s' as it is already loaded", stream->getName().c_str()));
+            return;
+        }
+
         ScriptCompilerManager::getSingleton().parseScript(stream, groupName);
     }
     //---------------------------------------------------------------------
@@ -206,15 +223,14 @@ namespace Ogre {
         orientationModeChanged = (mLastViewportOrientationMode != vp->getOrientationMode());
 #endif
         // Flag for update pixel-based GUIElements if viewport has changed dimensions
-        if (mLastViewportWidth != vp->getActualWidth() || 
-            mLastViewportHeight != vp->getActualHeight() ||
-            orientationModeChanged)
+        if (mLastViewportWidth != int(vp->getActualWidth() / mPixelRatio) ||
+            mLastViewportHeight != int(vp->getActualHeight() / mPixelRatio) || orientationModeChanged)
         {
 #if OGRE_NO_VIEWPORT_ORIENTATIONMODE == 0
             mLastViewportOrientationMode = vp->getOrientationMode();
 #endif
-            mLastViewportWidth = vp->getActualWidth();
-            mLastViewportHeight = vp->getActualHeight();
+            mLastViewportWidth = int(vp->getActualWidth() / mPixelRatio);
+            mLastViewportHeight = int(vp->getActualHeight() / mPixelRatio);
         }
 
         OverlayMap::iterator i, iend;
@@ -255,6 +271,16 @@ namespace Ogre {
                     "Getting ViewPort orientation mode is not supported");
 #endif
         return mLastViewportOrientationMode;
+    }
+    //---------------------------------------------------------------------
+    float OverlayManager::getPixelRatio(void) const
+    {
+        return mPixelRatio;
+    }
+    //---------------------------------------------------------------------
+    void OverlayManager::setPixelRatio(float ratio)
+    {
+        mPixelRatio = ratio;
     }
     //---------------------------------------------------------------------
     OverlayManager::ElementMap& OverlayManager::getElementMap(bool isATemplate)
@@ -322,7 +348,7 @@ namespace Ogre {
         OverlayElement* newElem = createOverlayElementFromFactory(typeName, instanceName);
 
         // Register
-        elementMap.insert(ElementMap::value_type(instanceName, newElem));
+        elementMap.emplace(instanceName, newElem);
 
         return newElem;
 

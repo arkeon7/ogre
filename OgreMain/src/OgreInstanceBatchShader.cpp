@@ -51,10 +51,9 @@ namespace Ogre
         if( technique )
         {
             GpuProgramParametersSharedPtr vertexParam = technique->getPass(0)->getVertexProgramParameters();
-            GpuConstantDefinitionIterator itor = vertexParam->getConstantDefinitionIterator();
-            while( itor.hasMoreElements() )
+            for(auto& it : vertexParam->getConstantDefinitions().map)
             {
-                const GpuConstantDefinition &constDef = itor.getNext();
+                const GpuConstantDefinition &constDef = it.second;
                 if(((constDef.constType == GCT_MATRIX_3X4 ||
                     constDef.constType == GCT_MATRIX_4X3 ||             //OGL GLSL bitches without this
                     constDef.constType == GCT_MATRIX_2X4 ||
@@ -92,12 +91,11 @@ namespace Ogre
                         if((retVal < 3 && entry->paramType == GpuProgramParameters::ACT_WORLD_MATRIX_ARRAY_3x4) ||
                             (retVal < 2 && entry->paramType == GpuProgramParameters::ACT_WORLD_DUALQUATERNION_ARRAY_2x4))
                         {
-                            LogManager::getSingleton().logMessage( "InstanceBatchShader: Mesh " +
-                                        mMeshReference->getName() + " using material " +
-                                        mMaterial->getName() + " contains many bones. The amount of "
+                            LogManager::getSingleton().logWarning( "InstanceBatchShader: Mesh '" +
+                                        mMeshReference->getName() + "' using material '" +
+                                        mMaterial->getName() + "'. The amount of possible "
                                         "instances per batch is very low. Performance benefits will "
-                                        "be minimal, if any. It might be even slower!",
-                                        LML_NORMAL );
+                                        "be minimal, if any. It might be even slower!");
                         }
 
                         return retVal;
@@ -201,7 +199,6 @@ namespace Ogre
                 }
             }
 
-            vertexBuffer->unlock();
         }
     }
     //-----------------------------------------------------------------------

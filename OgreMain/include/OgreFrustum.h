@@ -40,7 +40,7 @@ namespace Ogre
     /** \addtogroup Core
     *  @{
     */
-    /** \addtogroup Math
+    /** \addtogroup Scene
     *  @{
     */
     /** Specifies orientation mode.
@@ -83,6 +83,7 @@ namespace Ogre
     */
     class _OgreExport Frustum : public MovableObject, public Renderable
     {
+        bool getCastsShadows(void) const override { return getCastShadows(); }
     protected:
         /// Orthographic or perspective?
         ProjectionType mProjType;
@@ -168,28 +169,30 @@ namespace Ogre
         mutable AxisAlignedBox mBoundingBox;
         mutable VertexData mVertexData;
 
+        ColourValue mDebugColour;
         MaterialPtr mMaterial;
         mutable Vector3 mWorldSpaceCorners[8];
 
-        /// Is this frustum to act as a reflection of itself?
-        bool mReflect;
         /// Derived reflection matrix
         mutable Affine3 mReflectMatrix;
         /// Fixed reflection plane
         mutable Plane mReflectPlane;
-        /// Pointer to a reflection plane (automatically updated)
-        const MovablePlane* mLinkedReflectPlane;
         /// Record of the last world-space reflection plane info used
         mutable Plane mLastLinkedReflectionPlane;
-        
-        /// Is this frustum using an oblique depth projection?
-        bool mObliqueDepthProjection;
         /// Fixed oblique projection plane
         mutable Plane mObliqueProjPlane;
+
+        /// Pointer to a reflection plane (automatically updated)
+        const MovablePlane* mLinkedReflectPlane;
         /// Pointer to oblique projection plane (automatically updated)
         const MovablePlane* mLinkedObliqueProjPlane;
         /// Record of the last world-space oblique depth projection plane info used
         mutable Plane mLastLinkedObliqueProjPlane;
+
+        /// Is this frustum to act as a reflection of itself?
+        bool mReflect;
+        /// Is this frustum using an oblique depth projection?
+        bool mObliqueDepthProjection;
 
     public:
 
@@ -206,8 +209,6 @@ namespace Ogre
         @par
             This value represents the VERTICAL field-of-view. The horizontal field of view is calculated from
             this depending on the dimensions of the viewport (they will only be the same if the viewport is square).
-        @note
-            Setting the FOV overrides the value supplied for frustum::setNearClipPlane.
          */
         void setFOVy(const Radian& fovy);
 
@@ -228,7 +229,7 @@ namespace Ogre
          */
         void setNearClipDistance(Real nearDist);
 
-        /** Sets the position of the near clipping plane.
+        /** Retrieves the distance from the frustum to the near clipping plane.
         */
         Real getNearClipDistance(void) const;
 
@@ -472,41 +473,26 @@ namespace Ogre
         */
         virtual bool isVisible(const Vector3& vert, FrustumPlane* culledBy = 0) const;
 
-        /// Overridden from MovableObject::getTypeFlags
-        uint32 getTypeFlags(void) const;
+        uint32 getTypeFlags(void) const override;
+        const AxisAlignedBox& getBoundingBox(void) const override;
+        Real getBoundingRadius(void) const override;
+        void _updateRenderQueue(RenderQueue* queue) override;
+        const String& getMovableType(void) const override;
+        void _notifyCurrentCamera(Camera* cam) override;
 
-        /** Overridden from MovableObject */
-        const AxisAlignedBox& getBoundingBox(void) const;
+        /// @deprecated use setDebugColour
+        OGRE_DEPRECATED void setMaterial(const MaterialPtr& mat);
 
-        /** Overridden from MovableObject */
-        Real getBoundingRadius(void) const;
+        void setDebugColour(const ColourValue& col) { mDebugColour = col; }
+        const ColourValue& getDebugColour() const { return mDebugColour; }
 
-        /** Overridden from MovableObject */
-        void _updateRenderQueue(RenderQueue* queue);
+        const MaterialPtr& getMaterial(void) const override;
+        void getRenderOperation(RenderOperation& op) override;
+        void getWorldTransforms(Matrix4* xform) const override;
+        Real getSquaredViewDepth(const Camera* cam) const override;
+        const LightList& getLights(void) const override;
 
-        /** Overridden from MovableObject */
-        const String& getMovableType(void) const;
-
-        /** Overridden from MovableObject */
-        void _notifyCurrentCamera(Camera* cam);
-
-        /// material to use for debug display
-        void setMaterial(const MaterialPtr& mat);
-
-        /** Overridden from Renderable */
-        const MaterialPtr& getMaterial(void) const;
-
-        /** Overridden from Renderable */
-        void getRenderOperation(RenderOperation& op);
-
-        /** Overridden from Renderable */
-        void getWorldTransforms(Matrix4* xform) const;
-
-        /** Overridden from Renderable */
-        Real getSquaredViewDepth(const Camera* cam) const;
-
-        /** Overridden from Renderable */
-        const LightList& getLights(void) const;
+        typedef Vector3 Corners[8];
 
         /** Gets the world space corners of the frustum.
         @remarks
@@ -514,7 +500,7 @@ namespace Ogre
             top-left near, bottom-left near, bottom-right near, 
             top-right far, top-left far, bottom-left far, bottom-right far.
         */
-        virtual const Vector3* getWorldSpaceCorners(void) const;
+        virtual const Corners& getWorldSpaceCorners(void) const;
 
         /** Sets the type of projection to use (orthographic or perspective). Default is perspective.
         */

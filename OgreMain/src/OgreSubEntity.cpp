@@ -65,10 +65,10 @@ namespace Ogre {
 
         if( !material )
         {
-            LogManager::getSingleton().logMessage("Can't assign material '" + name +
+            LogManager::getSingleton().logError("Can't assign material '" + name +
                 "' to SubEntity of '" + mParentEntity->getName() + "' because this "
                 "Material does not exist in group '"+groupName+"'. Have you forgotten to define it in a "
-                ".material script?", LML_CRITICAL);
+                ".material script?");
 
             material = MaterialManager::getSingleton().getDefaultMaterial();
         }
@@ -82,10 +82,8 @@ namespace Ogre {
         
         if (!mMaterialPtr)
         {
-            LogManager::getSingleton().logMessage("Can't assign material "  
-                " to SubEntity of '" + mParentEntity->getName() + "' because this "
-                "Material does not exist. Have you forgotten to define it in a "
-                ".material script?", LML_CRITICAL);
+            LogManager::getSingleton().logError("Can't assign nullptr material "
+                "to SubEntity of '" + mParentEntity->getName() + "'. Falling back to default");
             
             mMaterialPtr = MaterialManager::getSingleton().getDefaultMaterial();
         }
@@ -95,11 +93,6 @@ namespace Ogre {
 
         // tell parent to reconsider material vertex processing options
         mParentEntity->reevaluateVertexProcessing();
-    }
-    //-----------------------------------------------------------------------
-    const MaterialPtr& SubEntity::getMaterial(void) const
-    {
-        return mMaterialPtr;
     }
     //-----------------------------------------------------------------------
     Technique* SubEntity::getTechnique(void) const
@@ -245,15 +238,16 @@ namespace Ogre {
         Real dist;
         if (!mSubMesh->extremityPoints.empty())
         {
+            bool euclidean = cam->getSortMode() == SM_DISTANCE;
+            Vector3 zAxis = cam->getDerivedDirection();
             const Vector3 &cp = cam->getDerivedPosition();
             const Affine3 &l2w = mParentEntity->_getParentNodeFullTransform();
             dist = std::numeric_limits<Real>::infinity();
-            for (std::vector<Vector3>::const_iterator i = mSubMesh->extremityPoints.begin();
-                 i != mSubMesh->extremityPoints.end (); ++i)
+            for (const Vector3& v : mSubMesh->extremityPoints)
             {
-                Vector3 v = l2w * (*i);
-                Real d = (v - cp).squaredLength();
-                
+                Vector3 diff = l2w * v - cp;
+                Real d = euclidean ? diff.squaredLength() : Math::Sqr(zAxis.dotProduct(diff));
+
                 dist = std::min(d, dist);
             }
         }
@@ -274,11 +268,6 @@ namespace Ogre {
     void SubEntity::setVisible(bool visible)
     {
         mVisible = visible;
-    }
-    //-----------------------------------------------------------------------
-    bool SubEntity::isVisible(void) const
-    {
-        return mVisible;
     }
     //-----------------------------------------------------------------------
     void SubEntity::prepareTempBlendBuffers(void)
@@ -443,26 +432,6 @@ namespace Ogre {
         setRenderQueueGroup(queueID);
         mRenderQueuePrioritySet = true;
         mRenderQueuePriority = priority;
-    }
-    //-----------------------------------------------------------------------
-    uint8 SubEntity::getRenderQueueGroup(void) const
-    {
-        return mRenderQueueID;
-    }
-    //-----------------------------------------------------------------------
-    ushort SubEntity::getRenderQueuePriority(void) const
-    {
-        return mRenderQueuePriority;
-    }
-    //-----------------------------------------------------------------------
-    bool SubEntity::isRenderQueueGroupSet(void) const
-    {
-        return mRenderQueueIDSet;
-    }
-    //-----------------------------------------------------------------------
-    bool SubEntity::isRenderQueuePrioritySet(void) const
-    {
-        return mRenderQueuePrioritySet;
     }
     //-----------------------------------------------------------------------
 }

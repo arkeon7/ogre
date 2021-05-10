@@ -30,7 +30,6 @@ THE SOFTWARE.
 #define __Overlay_H__
 
 #include "OgreOverlayPrerequisites.h"
-#include "OgreIteratorWrappers.h"
 #include "OgreMatrix4.h"
 #include "OgreViewport.h"
 
@@ -102,7 +101,7 @@ namespace Ogre {
         /** Internal lazy update method. */
         void updateTransform(void) const;
         /** Internal method for initialising an overlay */
-        void initialise(void);
+        virtual void initialise(void);
         /** Internal method for updating container elements' Z-ordering */
         void assignZOrders(void);
 
@@ -136,6 +135,9 @@ namespace Ogre {
 
         /** Hides the overlay if it was visible. */
         void hide(void);
+
+        /** Shows or hides this overlay. */
+        void setVisible(bool visible);
 
         /** Adds a 2D 'container' to the overlay.
         @remarks
@@ -249,7 +251,7 @@ namespace Ogre {
         void _getWorldTransforms(Matrix4* xform) const;
 
         /** Internal method to put the overlay contents onto the render queue. */
-        void _findVisibleObjects(Camera* cam, RenderQueue* queue, Viewport* vp);
+        virtual void _findVisibleObjects(Camera* cam, RenderQueue* queue, Viewport* vp);
 
         /** This returns a OverlayElement at position x,y. */
         virtual OverlayElement* findElementAt(Real x, Real y);

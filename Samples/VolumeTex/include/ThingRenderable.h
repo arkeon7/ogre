@@ -17,7 +17,7 @@ same license as the rest of the engine.
 #include "OgrePrerequisites.h"
 #include "OgreSimpleRenderable.h"
 #include "OgreQuaternion.h"
-#include "OgreVector3.h"
+#include "OgreVector.h"
 
 /** Quad fragments that rotate around origin (0,0,0) in a random orbit, always oriented to 0,0,0.
     @author W.J. van der Laan
@@ -31,15 +31,9 @@ public:
      */
     ThingRenderable(float radius, size_t count, float qsize);
     ~ThingRenderable();
-    /**
-     * Retrieves ratios of the origin-centered bounding sphere for this
-     * object.
-     */
-    Ogre::Real getBoundingRadius() const;
-    /**
-     * Returns the camera-relative squared depth of this renderable.
-     */
-    Ogre::Real getSquaredViewDepth(const Ogre::Camera*) const;
+
+    Ogre::Real getBoundingRadius() const override;
+    Ogre::Real getSquaredViewDepth(const Ogre::Camera*) const override;
     /**
      * Notify that t seconds have elapsed.
      */

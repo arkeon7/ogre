@@ -17,6 +17,7 @@ same license as the rest of the engine.
 #include "OgreMaterialManager.h"
 #include "OgreTechnique.h"
 #include "OgreRTShaderSystem.h"
+#include "OgreComponents.h"
 
 using namespace Ogre;
 
@@ -33,13 +34,16 @@ Technique* GBufferSchemeHandler::handleSchemeNotFound(unsigned short schemeIndex
     Technique* originalTechnique = originalMaterial->getBestTechnique(lodIndex, rend);
     matMgr.setActiveScheme(curSchemeName);
 
+#ifndef OGRE_BUILD_COMPONENT_RTSHADERSYSTEM
     Technique* gBufferTech = originalMaterial->createTechnique();
     gBufferTech->removeAllPasses();
-    gBufferTech->setSchemeName(schemeName);
+    gBufferTech->setSchemeName(schemeName)
+#endif
 
 #ifdef OGRE_BUILD_COMPONENT_RTSHADERSYSTEM
     RTShader::ShaderGenerator& rtShaderGen = RTShader::ShaderGenerator::getSingleton();
     rtShaderGen.createShaderBasedTechnique(originalTechnique, "NoGBuffer");
+    rtShaderGen.createShaderBasedTechnique(originalTechnique, "GBuffer");
 #else
     Technique* noGBufferTech = originalMaterial->createTechnique();
     noGBufferTech->removeAllPasses();
@@ -54,7 +58,7 @@ Technique* GBufferSchemeHandler::handleSchemeNotFound(unsigned short schemeIndex
         if (!props.isDeferred)
         {
 #ifdef OGRE_BUILD_COMPONENT_RTSHADERSYSTEM
-            rtShaderGen.validateMaterial("NoGBuffer", originalMaterial->getName(), originalMaterial->getGroup());
+            rtShaderGen.validateMaterial("NoGBuffer", *originalMaterial);
 #else
             //Just copy the technique so it gets rendered regularly
             Pass* clonePass = noGBufferTech->createPass();
@@ -63,7 +67,20 @@ Technique* GBufferSchemeHandler::handleSchemeNotFound(unsigned short schemeIndex
             continue;
         }
 
-        Pass* newPass = gBufferTech->createPass();
+#ifdef OGRE_BUILD_COMPONENT_RTSHADERSYSTEM
+        rtShaderGen.validateMaterial("GBuffer", *originalMaterial);
+        // Grab the generated technique.
+        for(Technique* curTech : originalMaterial->getTechniques())
+        {
+            if (curTech->getSchemeName() == schemeName)
+            {
+                return curTech;
+            }
+        }
+        break;
+#endif
+
+        Pass* newPass = 0;//gBufferTech->createPass();
         MaterialGenerator::Perm perm = getPermutation(props);
 
         const Ogre::MaterialPtr& templateMat = mMaterialGenerator.getMaterial(perm);
@@ -73,7 +90,7 @@ Technique* GBufferSchemeHandler::handleSchemeNotFound(unsigned short schemeIndex
         fillPass(newPass, originalPass, props);    
     }
     
-    return gBufferTech;
+    return NULL;// gBufferTech;
 }
 //! [schemenotfound]
 
@@ -81,7 +98,7 @@ bool GBufferSchemeHandler::checkNormalMap(
     TextureUnitState* tus, GBufferSchemeHandler::PassProperties& props)
 {
     bool isNormal = false;
-    Ogre::String lowerCaseAlias = tus->getTextureNameAlias();
+    Ogre::String lowerCaseAlias = tus->getName();
     Ogre::StringUtil::toLowerCase(lowerCaseAlias);
     if (lowerCaseAlias.find(NORMAL_MAP_PATTERN) != Ogre::String::npos)
     {

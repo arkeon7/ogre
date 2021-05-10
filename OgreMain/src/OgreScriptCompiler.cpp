@@ -29,6 +29,9 @@ THE SOFTWARE.
 #include "OgreStableHeaders.h"
 #include "OgreScriptParser.h"
 #include "OgreBuiltinScriptTranslators.h"
+#include "OgreComponents.h"
+
+#define DEBUG_AST 0
 
 namespace Ogre
 {
@@ -242,8 +245,6 @@ namespace Ogre
             return "invalid parameters";
         case CE_DUPLICATEOVERRIDE:
             return "duplicate object override";
-        case CE_UNSUPPORTEDBYRENDERSYSTEM:
-            return "object unsupported by render system";
         case CE_REFERENCETOANONEXISTINGOBJECT:
             return "reference to a non existing object";
         case CE_UNEXPECTEDTOKEN:
@@ -263,61 +264,63 @@ namespace Ogre
 
     bool ScriptCompiler::compile(const String &str, const String &source, const String &group)
     {
-        ConcreteNodeListPtr nodes = ScriptParser::parse(ScriptLexer::tokenize(str, source));
+        ConcreteNodeListPtr nodes = ScriptParser::parse(ScriptLexer::tokenize(str, source), source);
         return compile(nodes, group);
     }
 
-//  static void logAST(int tabs, const AbstractNodePtr &node)
-//  {
-//      String msg = "";
-//      for(int i = 0; i < tabs; ++i)
-//          msg += "\t";
-//
-//      switch(node->type)
-//      {
-//      case ANT_ATOM:
-//          {
-//              AtomAbstractNode *atom = static_cast<AtomAbstractNode*>(node.get());
-//              msg = msg + atom->value;
-//          }
-//          break;
-//      case ANT_PROPERTY:
-//          {
-//              PropertyAbstractNode *prop = static_cast<PropertyAbstractNode*>(node.get());
-//              msg = msg + prop->name + " =";
-//              for(AbstractNodeList::iterator i = prop->values.begin(); i != prop->values.end(); ++i)
-//              {
-//                  if((*i)->type == ANT_ATOM)
-//                      msg = msg + " " + static_cast<AtomAbstractNode*>((*i).get())->value;
-//              }
-//          }
-//          break;
-//      case ANT_OBJECT:
-//          {
-//              ObjectAbstractNode *obj = static_cast<ObjectAbstractNode*>(node.get());
-//              msg = msg + node->file + " - " + StringConverter::toString(node->line) + " - " + obj->cls + " \"" + obj->name + "\" =";
-//              for(AbstractNodeList::iterator i = obj->values.begin(); i != obj->values.end(); ++i)
-//              {
-//                  if((*i)->type == ANT_ATOM)
-//                      msg = msg + " " + static_cast<AtomAbstractNode*>((*i).get())->value;
-//              }
-//          }
-//          break;
-//      default:
-//          msg = msg + "Unacceptable node type: " + StringConverter::toString(node->type);
-//      }
-//
-//      LogManager::getSingleton().logMessage(msg);
-//
-//      if(node->type == ANT_OBJECT)
-//      {
-//          ObjectAbstractNode *obj = static_cast<ObjectAbstractNode*>(node.get());
-//          for(AbstractNodeList::iterator i = obj->children.begin(); i != obj->children.end(); ++i)
-//          {
-//              logAST(tabs + 1, *i);
-//          }
-//      }
-//  }
+#if DEBUG_AST
+    static void logAST(int tabs, const AbstractNodePtr &node)
+    {
+        String msg = "";
+        for(int i = 0; i < tabs; ++i)
+            msg += "\t";
+
+        switch(node->type)
+        {
+        case ANT_ATOM:
+            {
+                AtomAbstractNode *atom = static_cast<AtomAbstractNode*>(node.get());
+                msg = msg + atom->value;
+            }
+            break;
+        case ANT_PROPERTY:
+            {
+                PropertyAbstractNode *prop = static_cast<PropertyAbstractNode*>(node.get());
+                msg = msg + prop->name + " =";
+                for(AbstractNodeList::iterator i = prop->values.begin(); i != prop->values.end(); ++i)
+                {
+                    if((*i)->type == ANT_ATOM)
+                        msg = msg + " " + static_cast<AtomAbstractNode*>((*i).get())->value;
+                }
+            }
+            break;
+        case ANT_OBJECT:
+            {
+                ObjectAbstractNode *obj = static_cast<ObjectAbstractNode*>(node.get());
+                msg = msg + node->file + " - " + StringConverter::toString(node->line) + " - " + obj->cls + " \"" + obj->name + "\" =";
+                for(AbstractNodeList::iterator i = obj->values.begin(); i != obj->values.end(); ++i)
+                {
+                    if((*i)->type == ANT_ATOM)
+                        msg = msg + " " + static_cast<AtomAbstractNode*>((*i).get())->value;
+                }
+            }
+            break;
+        default:
+            msg = msg + "Unacceptable node type: " + StringConverter::toString(node->type);
+        }
+
+        LogManager::getSingleton().logMessage(msg);
+
+        if(node->type == ANT_OBJECT)
+        {
+            ObjectAbstractNode *obj = static_cast<ObjectAbstractNode*>(node.get());
+            for(AbstractNodeList::iterator i = obj->children.begin(); i != obj->children.end(); ++i)
+            {
+                logAST(tabs + 1, *i);
+            }
+        }
+    }
+#endif
 
     bool ScriptCompiler::compile(const ConcreteNodeListPtr &nodes, const String &group)
     {
@@ -349,7 +352,9 @@ namespace Ogre
         // Translate the nodes
         for(AbstractNodeList::iterator i = ast->begin(); i != ast->end(); ++i)
         {
-            //logAST(0, *i);
+#if DEBUG_AST
+            logAST(0, *i);
+#endif
             if((*i)->type == ANT_OBJECT && static_cast<ObjectAbstractNode*>((*i).get())->abstract)
                 continue;
             //LogManager::getSingleton().logMessage(static_cast<ObjectAbstractNode*>((*i).get())->name);
@@ -361,65 +366,6 @@ namespace Ogre
         mImports.clear();
         mImportRequests.clear();
         mImportTable.clear();
-
-        return mErrors.empty();
-    }
-
-    AbstractNodeListPtr ScriptCompiler::_generateAST(const String &str, const String &source, bool doImports, bool doObjects, bool doVariables)
-    {
-        // Clear the past errors
-        mErrors.clear();
-
-        ConcreteNodeListPtr cst = ScriptParser::parse(ScriptLexer::tokenize(str, source));
-
-        // Call the listener to intercept CST
-        if(mListener)
-            mListener->preConversion(this, cst);
-
-        // Convert our nodes to an AST
-        AbstractNodeListPtr ast = convertToAST(*cst);
-
-        if(ast && doImports)
-            processImports(*ast);
-        if(ast && doObjects)
-            processObjects(*ast, *ast);
-        if(ast && doVariables)
-            processVariables(*ast);
-
-        return ast;
-    }
-
-    bool ScriptCompiler::_compile(AbstractNodeListPtr nodes, const String &group, bool doImports, bool doObjects, bool doVariables)
-    {
-        // Set up the compilation context
-        mGroup = group;
-
-        // Clear the past errors
-        mErrors.clear();
-
-        // Clear the environment
-        mEnv.clear();
-
-        // Processes the imports for this script
-        if(doImports)
-            processImports(*nodes);
-        // Process object inheritance
-        if(doObjects)
-            processObjects(*nodes, *nodes);
-        // Process variable expansion
-        if(doVariables)
-            processVariables(*nodes);
-
-        // Translate the nodes
-        for(AbstractNodeList::iterator i = nodes->begin(); i != nodes->end(); ++i)
-        {
-            //logAST(0, *i);
-            if((*i)->type == ANT_OBJECT && static_cast<ObjectAbstractNode*>((*i).get())->abstract)
-                continue;
-            ScriptTranslator *translator = ScriptCompilerManager::getSingleton().getTranslator(*i);
-            if(translator)
-                translator->translate(this, *i);
-        }
 
         return mErrors.empty();
     }
@@ -492,23 +438,27 @@ namespace Ogre
                         processImports(*importedNodes);
                         processObjects(*importedNodes, *importedNodes);
                     }
+                    else
+                    {
+                        addError(CE_REFERENCETOANONEXISTINGOBJECT, import->file, import->line, import->source);
+                    }
+
                     if(importedNodes && !importedNodes->empty())
                         mImports.insert(std::make_pair(import->source, importedNodes));
                 }
 
+                ImportRequestMap::iterator iter = mImportRequests.lower_bound(import->source),
+                                           end = mImportRequests.upper_bound(import->source);
                 // Handle the target request now
                 // If it is a '*' import we remove all previous requests and just use the '*'
                 // Otherwise, ensure '*' isn't already registered and register our request
                 if(import->target == "*")
                 {
-                    mImportRequests.erase(mImportRequests.lower_bound(import->source),
-                        mImportRequests.upper_bound(import->source));
+                    mImportRequests.erase(iter, end);
                     mImportRequests.insert(std::make_pair(import->source, "*"));
                 }
                 else
                 {
-                    ImportRequestMap::iterator iter = mImportRequests.lower_bound(import->source),
-                        end = mImportRequests.upper_bound(import->source);
                     if(iter == end || iter->second != "*")
                     {
                         mImportRequests.insert(std::make_pair(import->source, import->target));
@@ -542,6 +492,9 @@ namespace Ogre
                         AbstractNodeList newNodes = locateTarget(*it->second, j->second);
                         if(!newNodes.empty())
                             mImportTable.insert(mImportTable.begin(), newNodes.begin(), newNodes.end());
+                        else
+                            // -1 for line as we lost that info here
+                            addError(CE_REFERENCETOANONEXISTINGOBJECT, nodes.front()->file, -1, j->second);
                     }
                 }
             }
@@ -558,17 +511,12 @@ namespace Ogre
 
         if(!nodes && ResourceGroupManager::getSingletonPtr())
         {
-            DataStreamPtr stream;
-            try
-            {
-                stream = ResourceGroupManager::getSingleton().openResource(name, mGroup);
-            }
-            catch (FileNotFoundException&)
-            {
-                return retval;
-            }
+            auto stream = ResourceGroupManager::getSingleton().openResource(name, mGroup, NULL, false);
 
-            nodes = ScriptParser::parse(ScriptLexer::tokenize(stream->getAsString(), name));
+            if (!stream)
+                return retval;
+
+            nodes = ScriptParser::parse(ScriptLexer::tokenize(stream->getAsString(), name), name);
         }
 
         if(nodes)
@@ -608,8 +556,11 @@ namespace Ogre
             {
                 ObjectAbstractNode *obj = (ObjectAbstractNode*)(*i).get();
 
+#ifdef OGRE_BUILD_COMPONENT_OVERLAY
+                bool isOverlayElement = obj->cls == "overlay_element";
+#endif
                 // Overlay base classes in order.
-                for (const String& base : obj->bases)
+                for (String& base : obj->bases)
                 {
                     // Check the top level first, then check the import table
                     AbstractNodeList newNodes = locateTarget(top, base);
@@ -620,7 +571,23 @@ namespace Ogre
                         addError(CE_OBJECTBASENOTFOUND, obj->file, obj->line, base);
 
                     for(const auto& n : newNodes)
-                        overlayObject(*n, *obj);
+                    {
+                        if(n->type != ANT_OBJECT) continue;
+
+                        auto src = static_cast<const ObjectAbstractNode&>(*n);
+
+#ifdef OGRE_BUILD_COMPONENT_OVERLAY
+                        // uses custom inheritance for renaming children
+                        if(isOverlayElement)
+                        {
+                            if(src.abstract)
+                                base = ""; // hide from custom inheritance
+                            else
+                                continue;
+                        }
+#endif
+                        overlayObject(src, *obj);
+                    }
                 }
 
                 // Recurse into children
@@ -634,181 +601,171 @@ namespace Ogre
         }
     }
 
-    void ScriptCompiler::overlayObject(const AbstractNode &source, ObjectAbstractNode& dest)
+    void ScriptCompiler::overlayObject(const ObjectAbstractNode &src, ObjectAbstractNode& dest)
     {
-        if(source.type == ANT_OBJECT)
+        // Overlay the environment of one on top the other first
+        for(std::map<String,String>::const_iterator i = src.getVariables().begin(); i != src.getVariables().end(); ++i)
         {
-            const ObjectAbstractNode& src = static_cast<const ObjectAbstractNode&>(source);
+            std::pair<bool,String> var = dest.getVariable(i->first);
+            if(!var.first)
+                dest.setVariable(i->first, i->second);
+        }
 
-#ifdef OGRE_BUILD_COMPONENT_OVERLAY
-            // uses custom inheritance for renaming children
-            if(!src.abstract && (dest.cls == "overlay_element"))
-                return;
-#endif
+        // Create a vector storing each pairing of override between source and destination
+        typedef SharedPtr<ObjectAbstractNode> ObjectAbstractNodePtr;
+        std::vector<std::pair<ObjectAbstractNodePtr,AbstractNodeList::iterator> > overrides;
+        // A list of indices for each destination node tracks the minimum
+        // source node they can index-match against
+        std::map<ObjectAbstractNode*,size_t> indices;
+        // A map storing which nodes have overridden from the destination node
+        std::map<ObjectAbstractNode*,bool> overridden;
 
-            // Overlay the environment of one on top the other first
-            for(std::map<String,String>::const_iterator i = src.getVariables().begin(); i != src.getVariables().end(); ++i)
+        // Fill the vector with objects from the source node (base)
+        // And insert non-objects into the overrides list of the destination
+        AbstractNodeList::iterator insertPos = dest.children.begin();
+        for(AbstractNodeList::const_iterator i = src.children.begin(); i != src.children.end(); ++i)
+        {
+            if((*i)->type == ANT_OBJECT)
             {
-                std::pair<bool,String> var = dest.getVariable(i->first);
-                if(!var.first)
-                    dest.setVariable(i->first, i->second);
+                overrides.push_back(std::make_pair(static_pointer_cast<ObjectAbstractNode>(*i), dest.children.end()));
             }
-            
-            // Create a vector storing each pairing of override between source and destination
-            std::vector<std::pair<AbstractNodePtr,AbstractNodeList::iterator> > overrides; 
-            // A list of indices for each destination node tracks the minimum
-            // source node they can index-match against
-            std::map<ObjectAbstractNode*,size_t> indices;
-            // A map storing which nodes have overridden from the destination node
-            std::map<ObjectAbstractNode*,bool> overridden;
-
-            // Fill the vector with objects from the source node (base)
-            // And insert non-objects into the overrides list of the destination
-            AbstractNodeList::iterator insertPos = dest.children.begin();
-            for(AbstractNodeList::const_iterator i = src.children.begin(); i != src.children.end(); ++i)
+            else
             {
-                if((*i)->type == ANT_OBJECT)
+                AbstractNodePtr newNode((*i)->clone());
+                newNode->parent = &dest;
+                dest.overrides.push_back(newNode);
+            }
+        }
+
+        // Track the running maximum override index in the name-matching phase
+        size_t maxOverrideIndex = 0;
+
+        // Loop through destination children searching for name-matching overrides
+        for(AbstractNodeList::iterator i = dest.children.begin(); i != dest.children.end(); )
+        {
+            if((*i)->type == ANT_OBJECT)
+            {
+                // Start tracking the override index position for this object
+                size_t overrideIndex = 0;
+
+                ObjectAbstractNode *node = static_cast<ObjectAbstractNode*>((*i).get());
+                indices[node] = maxOverrideIndex;
+                overridden[node] = false;
+
+                // special treatment for materials with * in their name
+                bool nodeHasWildcard=node->name.find('*') != String::npos;
+
+                // Find the matching name node
+                for(size_t j = 0; j < overrides.size(); ++j)
                 {
-                    overrides.push_back(std::make_pair(*i, dest.children.end()));
+                    ObjectAbstractNode *temp = overrides[j].first.get();
+                    // Consider a match a node that has a wildcard and matches an input name
+                    bool wildcardMatch = nodeHasWildcard &&
+                        (StringUtil::match(temp->name,node->name,true) ||
+                            (node->name.size() == 1 && temp->name.empty()));
+                    if(temp->cls == node->cls && !node->name.empty() && (temp->name == node->name || wildcardMatch))
+                    {
+                        // Pair these two together unless it's already paired
+                        if(overrides[j].second == dest.children.end())
+                        {
+                            AbstractNodeList::iterator currentIterator = i;
+                            ObjectAbstractNode *currentNode = node;
+                            if (wildcardMatch)
+                            {
+                                //If wildcard is matched, make a copy of current material and put it before the iterator, matching its name to the parent. Use same reinterpret cast as above when node is set
+                                AbstractNodePtr newNode((*i)->clone());
+                                currentIterator = dest.children.insert(currentIterator, newNode);
+                                currentNode = static_cast<ObjectAbstractNode*>((*currentIterator).get());
+                                currentNode->name = temp->name;//make the regex match its matcher
+                            }
+                            overrides[j] = std::make_pair(overrides[j].first, currentIterator);
+                            // Store the max override index for this matched pair
+                            overrideIndex = j;
+                            overrideIndex = maxOverrideIndex = std::max(overrideIndex, maxOverrideIndex);
+                            indices[currentNode] = overrideIndex;
+                            overridden[currentNode] = true;
+                        }
+                        else
+                        {
+                            addError(CE_DUPLICATEOVERRIDE, node->file, node->line);
+                        }
+
+                        if(!wildcardMatch)
+                            break;
+                    }
+                }
+
+                if (nodeHasWildcard)
+                {
+                    //if the node has a wildcard it will be deleted since it was duplicated for every match
+                    AbstractNodeList::iterator deletable=i++;
+                    dest.children.erase(deletable);
                 }
                 else
                 {
-                    AbstractNodePtr newNode((*i)->clone());
-                    newNode->parent = &dest;
-                    dest.overrides.push_back(newNode);
+                    ++i; //Behavior in absence of regex, just increment iterator
                 }
             }
-
-            // Track the running maximum override index in the name-matching phase
-            size_t maxOverrideIndex = 0;
-
-            // Loop through destination children searching for name-matching overrides
-            for(AbstractNodeList::iterator i = dest.children.begin(); i != dest.children.end(); )
+            else
             {
-                if((*i)->type == ANT_OBJECT)
+                ++i; //Behavior in absence of replaceable object, just increment iterator to find another
+            }
+        }
+
+        // Now make matches based on index
+        // Loop through destination children searching for index-matching overrides
+        for(AbstractNodeList::iterator i = dest.children.begin(); i != dest.children.end(); ++i)
+        {
+            if((*i)->type == ANT_OBJECT)
+            {
+                ObjectAbstractNode *node = static_cast<ObjectAbstractNode*>((*i).get());
+                if(!overridden[node])
                 {
-                    // Start tracking the override index position for this object
-                    size_t overrideIndex = 0;
+                    // Retrieve the minimum override index from the map
+                    size_t overrideIndex = indices[node];
 
-                    ObjectAbstractNode *node = static_cast<ObjectAbstractNode*>((*i).get());
-                    indices[node] = maxOverrideIndex;
-                    overridden[node] = false;
-
-                    // special treatment for materials with * in their name
-                    bool nodeHasWildcard=node->name.find('*') != String::npos;
-
-                    // Find the matching name node
-                    for(size_t j = 0; j < overrides.size(); ++j)
+                    if(overrideIndex < overrides.size())
                     {
-                        ObjectAbstractNode *temp = static_cast<ObjectAbstractNode*>(overrides[j].first.get());
-                        // Consider a match a node that has a wildcard and matches an input name
-                        bool wildcardMatch = nodeHasWildcard && 
-                            (StringUtil::match(temp->name,node->name,true) || 
-                                (node->name.size() == 1 && temp->name.empty()));
-                        if(temp->cls == node->cls && !node->name.empty() && (temp->name == node->name || wildcardMatch))
+                        // Search for minimum matching override
+                        for(size_t j = overrideIndex; j < overrides.size(); ++j)
                         {
-                            // Pair these two together unless it's already paired
-                            if(overrides[j].second == dest.children.end())
+                            ObjectAbstractNode *temp = overrides[j].first.get();
+                            if(temp->name.empty() && node->name.empty() && temp->cls == node->cls && overrides[j].second == dest.children.end())
                             {
-                                AbstractNodeList::iterator currentIterator = i;
-                                ObjectAbstractNode *currentNode = node;
-                                if (wildcardMatch)
-                                {
-                                    //If wildcard is matched, make a copy of current material and put it before the iterator, matching its name to the parent. Use same reinterpret cast as above when node is set
-                                    AbstractNodePtr newNode((*i)->clone());
-                                    currentIterator = dest.children.insert(currentIterator, newNode);
-                                    currentNode = static_cast<ObjectAbstractNode*>((*currentIterator).get());
-                                    currentNode->name = temp->name;//make the regex match its matcher
-                                }
-                                overrides[j] = std::make_pair(overrides[j].first, currentIterator);
-                                // Store the max override index for this matched pair
-                                overrideIndex = j;
-                                overrideIndex = maxOverrideIndex = std::max(overrideIndex, maxOverrideIndex);
-                                indices[currentNode] = overrideIndex;
-                                overridden[currentNode] = true;
-                            }
-                            else
-                            {
-                                addError(CE_DUPLICATEOVERRIDE, node->file, node->line);
-                            }
-
-                            if(!wildcardMatch)
+                                overrides[j] = std::make_pair(overrides[j].first, i);
                                 break;
-                        }
-                    }
-
-                    if (nodeHasWildcard)
-                    {
-                        //if the node has a wildcard it will be deleted since it was duplicated for every match
-                        AbstractNodeList::iterator deletable=i++;
-                        dest.children.erase(deletable);
-                    }
-                    else
-                    {
-                        ++i; //Behavior in absence of regex, just increment iterator
-                    }
-                }
-                else 
-                {
-                    ++i; //Behavior in absence of replaceable object, just increment iterator to find another
-                }
-            }
-
-            // Now make matches based on index
-            // Loop through destination children searching for index-matching overrides
-            for(AbstractNodeList::iterator i = dest.children.begin(); i != dest.children.end(); ++i)
-            {
-                if((*i)->type == ANT_OBJECT)
-                {
-                    ObjectAbstractNode *node = static_cast<ObjectAbstractNode*>((*i).get());
-                    if(!overridden[node])
-                    {
-                        // Retrieve the minimum override index from the map
-                        size_t overrideIndex = indices[node];
-
-                        if(overrideIndex < overrides.size())
-                        {
-                            // Search for minimum matching override
-                            for(size_t j = overrideIndex; j < overrides.size(); ++j)
-                            {
-                                ObjectAbstractNode *temp = static_cast<ObjectAbstractNode*>(overrides[j].first.get());
-                                if(temp->name.empty() && node->name.empty() && temp->cls == node->cls && overrides[j].second == dest.children.end())
-                                {
-                                    overrides[j] = std::make_pair(overrides[j].first, i);
-                                    break;
-                                }
                             }
                         }
                     }
                 }
             }
+        }
 
-            // Loop through overrides, either inserting source nodes or overriding
-            insertPos = dest.children.begin();
-            for(size_t i = 0; i < overrides.size(); ++i)
+        // Loop through overrides, either inserting source nodes or overriding
+        insertPos = dest.children.begin();
+        for(size_t i = 0; i < overrides.size(); ++i)
+        {
+            if(overrides[i].second != dest.children.end())
             {
-                if(overrides[i].second != dest.children.end())
+                // Override the destination with the source (base) object
+                overlayObject(*overrides[i].first,
+                    static_cast<ObjectAbstractNode&>(**overrides[i].second));
+                insertPos = overrides[i].second;
+                insertPos++;
+            }
+            else
+            {
+                // No override was possible, so insert this node at the insert position
+                // into the destination (child) object
+                AbstractNodePtr newNode(overrides[i].first->clone());
+                newNode->parent = &dest;
+                if(insertPos != dest.children.end())
                 {
-                    // Override the destination with the source (base) object
-                    overlayObject(*overrides[i].first,
-                        static_cast<ObjectAbstractNode&>(**overrides[i].second));
-                    insertPos = overrides[i].second;
-                    insertPos++;
+                    dest.children.insert(insertPos, newNode);
                 }
                 else
                 {
-                    // No override was possible, so insert this node at the insert position
-                    // into the destination (child) object
-                    AbstractNodePtr newNode(overrides[i].first->clone());
-                    newNode->parent = &dest;
-                    if(insertPos != dest.children.end())
-                    {
-                        dest.children.insert(insertPos, newNode);
-                    }
-                    else
-                    {
-                        dest.children.push_back(newNode);
-                    }
+                    dest.children.push_back(newNode);
                 }
             }
         }
@@ -840,7 +797,7 @@ namespace Ogre
             while(parent && parent->type == ANT_OBJECT)
             {
                 ObjectAbstractNode *obj = static_cast<ObjectAbstractNode*>(parent);
-                if(obj->id == ID_COMPOSITOR)
+                if(obj->id == ID_TARGET || obj->id == ID_TARGET_OUTPUT)
                     return true;
                 parent = obj->parent;
             }
@@ -915,7 +872,7 @@ namespace Ogre
                 if(varAccess.first)
                 {
                     // Found the variable, so process it and insert it into the tree
-                    ConcreteNodeListPtr cst = ScriptParser::parseChunk(ScriptLexer::tokenize(varAccess.second, var->file));
+                    ConcreteNodeListPtr cst = ScriptParser::parseChunk(ScriptLexer::tokenize(varAccess.second, var->file), var->file);
                     AbstractNodeListPtr ast = convertToAST(*cst);
 
                     // Set up ownership for these nodes
@@ -1182,7 +1139,7 @@ namespace Ogre
         mIds["target_output"] = ID_TARGET_OUTPUT;
 
         mIds["input"] = ID_INPUT;
-        mIds["none"] = ID_NONE;
+        //mIds["none"] = ID_NONE; - already registered
         mIds["previous"] = ID_PREVIOUS;
         mIds["target_width"] = ID_TARGET_WIDTH;
         mIds["target_height"] = ID_TARGET_HEIGHT;
@@ -1246,6 +1203,9 @@ namespace Ogre
         mIds["sampler_ref"] = ID_SAMPLER_REF;
         mIds["thread_groups"] = ID_THREAD_GROUPS;
         mIds["render_custom"] = ID_RENDER_CUSTOM;
+        mIds["auto"] = ID_AUTO;
+        mIds["camera"] = ID_CAMERA;
+        mIds["align_to_face"] = ID_ALIGN_TO_FACE;
 
 		mLargestRegisteredWordId = ID_END_BUILTIN_IDS;
 	}
@@ -1650,7 +1610,7 @@ namespace Ogre
     void ScriptCompilerManager::parseScript(DataStreamPtr& stream, const String& groupName)
     {
         ConcreteNodeListPtr nodes =
-            ScriptParser::parse(ScriptLexer::tokenize(stream->getAsString(), stream->getName()));
+            ScriptParser::parse(ScriptLexer::tokenize(stream->getAsString(), stream->getName()), stream->getName());
         {
             // compile is not reentrant
             OGRE_LOCK_AUTO_MUTEX;
@@ -1668,8 +1628,6 @@ namespace Ogre
     String CreateMaterialScriptCompilerEvent::eventType = "createMaterial";
     //----------------------------------------------------------------------------
     String CreateGpuProgramScriptCompilerEvent::eventType = "createGpuProgram";
-    //-------------------------------------------------------------------------
-    String CreateHighLevelGpuProgramScriptCompilerEvent::eventType = "createHighLevelGpuProgram";
     //-------------------------------------------------------------------------
     String CreateGpuSharedParametersScriptCompilerEvent::eventType = "createGpuSharedParameters";
     //-------------------------------------------------------------------------

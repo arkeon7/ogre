@@ -68,11 +68,11 @@ if (OGRE_CONFIG_THREADS)
 
 endif()
 
-set(OGRE_ASSERT_MODE 1 CACHE STRING 
-	"Enable Ogre asserts and exceptions. Possible values:
+set(OGRE_ASSERT_MODE 2 CACHE STRING
+	"Enable Ogre asserts. Possible values:
 	0 - Standard asserts in debug builds, nothing in release builds.
 	1 - Standard asserts in debug builds, exceptions in release builds.
-	2 - Exceptions in debug builds, exceptions in release builds."
+	2 - Exceptions in debug & release builds."
 )
 set_property(CACHE OGRE_ASSERT_MODE PROPERTY STRINGS 0 1 2)
 
@@ -124,8 +124,8 @@ if (OGRE_TEST_BIG_ENDIAN)
 else ()
   set(OGRE_CONFIG_LITTLE_ENDIAN 1)
 endif ()
-set(RTSHADER_SYSTEM_BUILD_CORE_SHADERS ${OGRE_BUILD_RTSHADERSYSTEM_CORE_SHADERS})
-set(RTSHADER_SYSTEM_BUILD_EXT_SHADERS ${OGRE_BUILD_RTSHADERSYSTEM_EXT_SHADERS})
+set(RTSHADER_SYSTEM_BUILD_CORE_SHADERS ${OGRE_BUILD_RTSHADERSYSTEM_SHADERS})
+set(RTSHADER_SYSTEM_BUILD_EXT_SHADERS ${OGRE_BUILD_RTSHADERSYSTEM_SHADERS})
 if (NOT OGRE_CONFIG_ENABLE_QUAD_BUFFER_STEREO)
   set(OGRE_NO_QUAD_BUFFER_STEREO 1)
 endif()
@@ -133,7 +133,15 @@ if(SDL2_FOUND OR EMSCRIPTEN)
     set(OGRE_BITES_HAVE_SDL 1)
 endif()
 
+# determine if strtol_l is supported
+include(CheckFunctionExists)
+CHECK_FUNCTION_EXISTS(strtol_l HAVE_STRTOL_L)
+if (NOT HAVE_STRTOL_L)
+  set(OGRE_NO_LOCALE_STRCONVERT 1)
+endif ()
+
 # generate OgreBuildSettings.h
+configure_file(${OGRE_TEMPLATES_DIR}/OgreComponents.h.in ${PROJECT_BINARY_DIR}/include/OgreComponents.h @ONLY)
 configure_file(${OGRE_TEMPLATES_DIR}/OgreBuildSettings.h.in ${PROJECT_BINARY_DIR}/include/OgreBuildSettings.h @ONLY)
 configure_file(${OGRE_TEMPLATES_DIR}/OgreRTShaderConfig.h.in ${PROJECT_BINARY_DIR}/include/OgreRTShaderConfig.h @ONLY)
 configure_file(${OGRE_TEMPLATES_DIR}/OgreGLES2Config.h.in ${PROJECT_BINARY_DIR}/include/OgreGLES2Config.h @ONLY)
@@ -159,9 +167,7 @@ if (UNIX)
 
   set(OGRE_ADDITIONAL_LIBS "")
   set(OGRE_ADDITIONAL_INCLUDE_DIRS "")
-  if (APPLE AND NOT APPLE_IOS)
-    set(OGRE_ADDITIONAL_INCLUDE_DIRS "-I\${includedir}/OGRE/OSX")
-  endif ()
+
   set(OGRE_CFLAGS "")
   set(OGRE_PREFIX_PATH ${CMAKE_INSTALL_PREFIX})
   if (OGRE_CONFIG_THREADS GREATER 0)

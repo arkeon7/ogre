@@ -31,6 +31,7 @@ THE SOFTWARE.
 #include "OgrePrerequisites.h"
 #include "OgreCommon.h"
 #include "OgreLight.h"
+#include "OgreSceneNode.h"
 
 namespace Ogre {
 
@@ -57,7 +58,7 @@ namespace Ogre {
     */
     class _OgreExport AutoParamDataSource : public SceneMgtAlloc
     {
-    protected:
+    private:
         const Light& getLight(size_t index) const;
         mutable Affine3 mWorldMatrix[256];
         mutable size_t mWorldMatrixCount;
@@ -104,8 +105,8 @@ namespace Ogre {
         mutable bool mShadowCamDepthRangesDirty[OGRE_MAX_SIMULTANEOUS_LIGHTS];
         ColourValue mAmbientLight;
         ColourValue mFogColour;
-        Vector4 mFogParams;
-        Vector4 mPointParams;
+        Vector4f mFogParams;
+        Vector4f mPointParams;
         int mPassNumber;
         mutable Vector4 mSceneDepthRange;
         mutable bool mSceneDepthRangeDirty;
@@ -124,6 +125,7 @@ namespace Ogre {
         const VisibleObjectsBoundsInfo* mMainCamBoundsInfo;
         const Pass* mCurrentPass;
 
+        SceneNode mDummyNode;
         Light mBlankLight;
     public:
         AutoParamDataSource();
@@ -170,6 +172,7 @@ namespace Ogre {
         const Matrix4& getInverseTransposeWorldViewMatrix(void) const;
         const Vector4& getCameraPosition(void) const;
         const Vector4& getCameraPositionObjectSpace(void) const;
+        const Vector4  getCameraRelativePosition(void) const;
         const Vector4& getLodCameraPosition(void) const;
         const Vector4& getLodCameraPositionObjectSpace(void) const;
         bool hasLightList() const { return mCurrentLightList != 0; }
@@ -181,12 +184,12 @@ namespace Ogre {
         const ColourValue& getLightSpecularColour(size_t index) const;
         const ColourValue getLightDiffuseColourWithPower(size_t index) const;
         const ColourValue getLightSpecularColourWithPower(size_t index) const;
-        const Vector3& getLightPosition(size_t index) const;
+        Vector3 getLightPosition(size_t index) const;
         Vector4 getLightAs4DVector(size_t index) const;
-        const Vector3& getLightDirection(size_t index) const;
+        Vector3 getLightDirection(size_t index) const;
         Real getLightPowerScale(size_t index) const;
-        Vector4 getLightAttenuation(size_t index) const;
-        Vector4 getSpotlightParams(size_t index) const;
+        const Vector4f& getLightAttenuation(size_t index) const;
+        Vector4f getSpotlightParams(size_t index) const;
         void setAmbientLightColour(const ColourValue& ambient);
         const ColourValue& getAmbientLightColour(void) const;
         const ColourValue& getSurfaceAmbientColour(void) const;
@@ -199,10 +202,9 @@ namespace Ogre {
         ColourValue getDerivedSceneColour(void) const;
         void setFog(FogMode mode, const ColourValue& colour, Real expDensity, Real linearStart, Real linearEnd);
         const ColourValue& getFogColour(void) const;
-        const Vector4& getFogParams(void) const;
-        void setPointParameters(Real size, bool attenuation, Real constant, Real linear,
-                                Real quadratic);
-        const Vector4& getPointParams() const;
+        const Vector4f& getFogParams(void) const;
+        void setPointParameters(bool attenuation, const Vector4f& params);
+        const Vector4f& getPointParams() const;
         const Matrix4& getTextureViewProjMatrix(size_t index) const;
         const Matrix4& getTextureWorldViewProjMatrix(size_t index) const;
         const Matrix4& getSpotlightViewProjMatrix(size_t index) const;
@@ -211,9 +213,9 @@ namespace Ogre {
         const RenderTarget* getCurrentRenderTarget(void) const;
         const Renderable* getCurrentRenderable(void) const;
         const Pass* getCurrentPass(void) const;
-        Vector4 getTextureSize(size_t index) const;
-        Vector4 getInverseTextureSize(size_t index) const;
-        Vector4 getPackedTextureSize(size_t index) const;
+        Vector4f getTextureSize(size_t index) const;
+        Vector4f getInverseTextureSize(size_t index) const;
+        Vector4f getPackedTextureSize(size_t index) const;
         Real getShadowExtrusionDistance(void) const;
         const Vector4& getSceneDepthRange() const;
         const Vector4& getShadowSceneDepthRange(size_t index) const;
@@ -236,17 +238,17 @@ namespace Ogre {
         Real getCosTime_0_X(Real x) const;
         Real getSinTime_0_X(Real x) const;
         Real getTanTime_0_X(Real x) const;
-        Vector4 getTime_0_X_packed(Real x) const;
+        Vector4f getTime_0_X_packed(Real x) const;
         Real getTime_0_1(Real x) const;
         Real getCosTime_0_1(Real x) const;
         Real getSinTime_0_1(Real x) const;
         Real getTanTime_0_1(Real x) const;
-        Vector4 getTime_0_1_packed(Real x) const;
+        Vector4f getTime_0_1_packed(Real x) const;
         Real getTime_0_2Pi(Real x) const;
         Real getCosTime_0_2Pi(Real x) const;
         Real getSinTime_0_2Pi(Real x) const;
         Real getTanTime_0_2Pi(Real x) const;
-        Vector4 getTime_0_2Pi_packed(Real x) const;
+        Vector4f getTime_0_2Pi_packed(Real x) const;
         Real getFrameTime(void) const;
         Real getFPS() const;
         Real getViewportWidth() const;

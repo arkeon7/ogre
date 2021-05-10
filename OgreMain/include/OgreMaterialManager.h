@@ -124,14 +124,13 @@ namespace Ogre {
 			virtual bool beforeIlluminationPassesCleared(Technique* technique) { return false; }
         };
 
-    protected:
+    private:
         /// Default settings
         MaterialPtr mDefaultSettings;
 
-        /// Overridden from ResourceManager
         Resource* createImpl(const String& name, ResourceHandle handle, 
             const String& group, bool isManual, ManualResourceLoader* loader,
-            const NameValuePairList* params);
+            const NameValuePairList* params) override;
 
         /// Scheme name -> index. Never shrinks! Should be pretty static anyway
         typedef std::map<String, unsigned short> SchemeMap;
@@ -159,7 +158,7 @@ namespace Ogre {
         
         /// Get a resource by name
         /// @see ResourceManager::getResourceByName
-        MaterialPtr getByName(const String& name, const String& groupName = ResourceGroupManager::AUTODETECT_RESOURCE_GROUP_NAME);
+        MaterialPtr getByName(const String& name, const String& groupName = ResourceGroupManager::AUTODETECT_RESOURCE_GROUP_NAME) const;
 
         /// Get a default material that is always available even when no resources were loaded
         /// @param useLighting whether the material should be lit
@@ -248,12 +247,12 @@ namespace Ogre {
         /** Internal method - returns the active scheme index.
         @see Technique::setSchemeName
         */
-        virtual unsigned short _getActiveSchemeIndex(void) const;
+        unsigned short _getActiveSchemeIndex(void) const { return mActiveSchemeIndex; }
 
         /** Returns the name of the active material scheme. 
         @see Technique::setSchemeName
         */
-        virtual const String& getActiveScheme(void) const;
+        const String& getActiveScheme(void) const { return mActiveSchemeName; }
         
         /** Sets the name of the active material scheme. 
         @see Technique::setSchemeName

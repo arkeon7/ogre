@@ -1,5 +1,3 @@
-find_package(SWIG 3.0.8)
-
 if(ANDROID)
 	set(JNI_FOUND TRUE)
 	add_library(cpufeatures STATIC ${ANDROID_NDK}/sources/android/cpufeatures/cpu-features.c)
@@ -21,9 +19,12 @@ include_directories("${PROJECT_BINARY_DIR}/include" "${PROJECT_SOURCE_DIR}/OgreM
 include(${SWIG_USE_FILE})
 
 if(MSVC)
-	add_definitions(/bigobj)
+	add_definitions(/bigobj /wd4700)
 else()
 	add_definitions(-Wno-strict-aliasing -Wno-cast-qual -Wno-shadow -Wno-missing-declarations)
+	if(CMAKE_COMPILER_IS_GNUCXX)
+		add_definitions(-Wno-unused-but-set-variable)
+	endif()
 endif()
 
 set(CMAKE_SWIG_FLAGS -w401,314 -package org.ogre)
@@ -37,7 +38,8 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}/java/libs")
 set(CMAKE_SWIG_OUTDIR "${PROJECT_BINARY_DIR}/java/src/org/ogre")
 
 if(ANDROID)
-	set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/${ANDROID_NDK_ABI_NAME}")
+    set(CMAKE_SWIG_OUTDIR "${PROJECT_BINARY_DIR}/java/app/src/main/java/org/ogre")
+    set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}/java/app/src/main/jniLibs/${ANDROID_NDK_ABI_NAME}")
 	list(APPEND CMAKE_SWIG_FLAGS -D__ANDROID__)
 endif()
 
@@ -49,16 +51,24 @@ if(OGRE_BUILD_COMPONENT_RTSHADERSYSTEM)
 	list(APPEND SWIG_INPUT_MODULES ../RTShaderSystem/include/OgreRTShader.i)
 endif()
 
+if(OGRE_BUILD_COMPONENT_TERRAIN)
+	set_source_files_properties(../Terrain/include/OgreTerrain.i PROPERTIES CPLUSPLUS ON)
+	list(APPEND SWIG_INPUT_MODULES ../Terrain/include/OgreTerrain.i)
+endif()
+
 if(OGRE_BUILD_COMPONENT_OVERLAY)
 	set_source_files_properties(../Overlay/include/OgreOverlay.i PROPERTIES CPLUSPLUS ON)
 	list(APPEND SWIG_INPUT_MODULES ../Overlay/include/OgreOverlay.i)
 endif()
 
-if(OGRE_BUILD_COMPONENT_BITES)
-	if(SDL2_FOUND)
-		include_directories(${SDL2_INCLUDE_DIR})
-	endif()
+if(OGRE_BUILD_COMPONENT_OVERLAY_IMGUI)
+	include_directories("${IMGUI_DIR}")
+	list(APPEND CMAKE_SWIG_FLAGS -DHAVE_IMGUI -DIMGUI_DISABLE_OBSOLETE_FUNCTIONS)
+    set_source_files_properties(../Overlay/include/ImGui.i PROPERTIES CPLUSPLUS ON)
+    list(APPEND SWIG_INPUT_MODULE ../Overlay/include/ImGui.i)
+endif()
 
+if(OGRE_BUILD_COMPONENT_BITES)
 	set_source_files_properties(../Bites/include/OgreBites.i PROPERTIES CPLUSPLUS ON)
 
 	if(ANDROID)
@@ -68,8 +78,9 @@ if(OGRE_BUILD_COMPONENT_BITES)
 	list(APPEND SWIG_INPUT_MODULES ../Bites/include/OgreBites.i)
 endif()
 
+set(CMAKE_WARN_DEPRECATED OFF)
 swig_add_module(OgreJNI java ${SWIG_INPUT_MODULES})
-swig_link_libraries(OgreJNI OgreBites OgreOverlay OgreRTShaderSystem OgreMain ${JNI_LIBRARIES})
+swig_link_libraries(OgreJNI OgreBites OgreOverlay OgreRTShaderSystem OgreTerrain OgreMain ${JNI_LIBRARIES})
 
 if(${Java_FOUND})
 	set(CLASS_OUTPUT_PATH "${PROJECT_BINARY_DIR}/java/classes")
@@ -78,7 +89,10 @@ if(${Java_FOUND})
 	add_custom_command(TARGET ${SWIG_MODULE_OgreJNI_REAL_NAME} POST_BUILD
     	COMMAND "${Java_JAVAC_EXECUTABLE}" -d ${CLASS_OUTPUT_PATH} "${PROJECT_BINARY_DIR}/java/src/org/ogre/*.java"
 		COMMAND "${Java_JAR_EXECUTABLE}" cf ${JAR_NAME} -C ${CLASS_OUTPUT_PATH} .
-	)
+    )
+
+    install(FILES ${JAR_NAME} DESTINATION share/java/)
+    ogre_install_target(${SWIG_MODULE_OgreJNI_REAL_NAME} "" FALSE)
 endif()
 
 if(ANDROID)

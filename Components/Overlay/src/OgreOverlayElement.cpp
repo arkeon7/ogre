@@ -34,22 +34,26 @@ THE SOFTWARE.
 #include "OgreMaterialManager.h"
 #include "OgreOverlayContainer.h"
 #include "OgreResourceGroupManager.h"
+#include "OgreOverlayElementCommands.h"
+#include "OgreTechnique.h"
+#include "OgreLogManager.h"
 
 namespace Ogre {
 
 
     //---------------------------------------------------------------------
     // Define static members
-    OverlayElementCommands::CmdLeft OverlayElement::msLeftCmd;
-    OverlayElementCommands::CmdTop OverlayElement::msTopCmd;
-    OverlayElementCommands::CmdWidth OverlayElement::msWidthCmd;
-    OverlayElementCommands::CmdHeight OverlayElement::msHeightCmd;
-    OverlayElementCommands::CmdMaterial OverlayElement::msMaterialCmd;
-    OverlayElementCommands::CmdCaption OverlayElement::msCaptionCmd;
-    OverlayElementCommands::CmdMetricsMode OverlayElement::msMetricsModeCmd;
-    OverlayElementCommands::CmdHorizontalAlign OverlayElement::msHorizontalAlignCmd;
-    OverlayElementCommands::CmdVerticalAlign OverlayElement::msVerticalAlignCmd;
-    OverlayElementCommands::CmdVisible OverlayElement::msVisibleCmd;
+    // Command object for setting / getting parameters
+    static OverlayElementCommands::CmdLeft msLeftCmd;
+    static OverlayElementCommands::CmdTop msTopCmd;
+    static OverlayElementCommands::CmdWidth msWidthCmd;
+    static OverlayElementCommands::CmdHeight msHeightCmd;
+    static OverlayElementCommands::CmdMaterial msMaterialCmd;
+    static OverlayElementCommands::CmdCaption msCaptionCmd;
+    static OverlayElementCommands::CmdMetricsMode msMetricsModeCmd;
+    static OverlayElementCommands::CmdHorizontalAlign msHorizontalAlignCmd;
+    static OverlayElementCommands::CmdVerticalAlign msVerticalAlignCmd;
+    static OverlayElementCommands::CmdVisible msVisibleCmd;
 
     const String& OverlayElement::DEFAULT_RESOURCE_GROUP = ResourceGroupManager::AUTODETECT_RESOURCE_GROUP_NAME;
     //---------------------------------------------------------------------
@@ -97,26 +101,6 @@ namespace Ogre {
             mParent->removeChild(mName);
             mParent = 0;
         }
-    }
-    //---------------------------------------------------------------------
-    const String& OverlayElement::getName(void) const
-    {
-        return mName;
-    }
-    //---------------------------------------------------------------------
-    void OverlayElement::show(void)
-    {
-        mVisible = true;
-    }
-    //---------------------------------------------------------------------
-    void OverlayElement::hide(void)
-    {
-        mVisible = false;
-    }
-    //---------------------------------------------------------------------
-    bool OverlayElement::isVisible(void) const
-    {
-        return mVisible;
     }
     //---------------------------------------------------------------------
     void OverlayElement::setDimensions(Real width, Real height)
@@ -327,8 +311,18 @@ namespace Ogre {
             return;
 
         mMaterial->load();
+
+        auto dstPass = mMaterial->getTechnique(0)->getPass(0); // assume this is representative
+        if (dstPass->getLightingEnabled() || dstPass->getDepthCheckEnabled())
+        {
+            LogManager::getSingleton().logWarning(
+                "force-disabling 'lighting' and 'depth_check' of Material " + mat->getName() +
+                " for use with OverlayElement " + getName());
+        }
+
         // Set some prerequisites to be sure
         mMaterial->setLightingEnabled(false);
+        mMaterial->setReceiveShadows(false);
         mMaterial->setDepthCheckEnabled(false);
     }
 
@@ -695,11 +689,6 @@ namespace Ogre {
         _positionsOutOfDate();
     }
     //-----------------------------------------------------------------------
-    const DisplayString& OverlayElement::getCaption() const
-    {
-        return mCaption;
-    }
-    //-----------------------------------------------------------------------
     void OverlayElement::setColour(const ColourValue& col)
     {
         mColour = col;
@@ -779,31 +768,16 @@ namespace Ogre {
         _positionsOutOfDate();
     }
     //-----------------------------------------------------------------------
-    GuiMetricsMode OverlayElement::getMetricsMode(void) const
-    {
-        return mMetricsMode;
-    }
-    //-----------------------------------------------------------------------
     void OverlayElement::setHorizontalAlignment(GuiHorizontalAlignment gha)
     {
         mHorzAlign = gha;
         _positionsOutOfDate();
     }
     //-----------------------------------------------------------------------
-    GuiHorizontalAlignment OverlayElement::getHorizontalAlignment(void) const
-    {
-        return mHorzAlign;
-    }
-    //-----------------------------------------------------------------------
     void OverlayElement::setVerticalAlignment(GuiVerticalAlignment gva)
     {
         mVertAlign = gva;
         _positionsOutOfDate();
-    }
-    //-----------------------------------------------------------------------
-    GuiVerticalAlignment OverlayElement::getVerticalAlignment(void) const
-    {
-        return mVertAlign;
     }
     //-----------------------------------------------------------------------    
     bool OverlayElement::contains(Real x, Real y) const
@@ -819,11 +793,6 @@ namespace Ogre {
             ret = this;
         }
         return ret;
-    }
-    //-----------------------------------------------------------------------
-    OverlayContainer* OverlayElement::getParent() 
-    { 
-        return mParent;     
     }
     //-----------------------------------------------------------------------
     void OverlayElement::copyFromTemplate(OverlayElement* templateOverlay)
@@ -842,16 +811,6 @@ namespace Ogre {
         copyParametersTo(newElement);
 
         return newElement;
-    }
-    //-----------------------------------------------------------------------
-    bool OverlayElement::isEnabled() const
-    { 
-        return mEnabled;
-    }
-    //-----------------------------------------------------------------------
-    void OverlayElement::setEnabled(bool b) 
-    {
-        mEnabled = b;
     }
     //-----------------------------------------------------------------------
 

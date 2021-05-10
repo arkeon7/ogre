@@ -97,7 +97,6 @@ namespace Ogre
     */
     class _OgreExport LiSPSMShadowCameraSetup : public FocusedShadowCameraSetup
     {
-    protected:
         /// Warp factor adjustment
         Real mOptAdjustFactor;
         /// Use simple nopt derivation?
@@ -172,7 +171,7 @@ namespace Ogre
             const Camera& cam) const;
     public:
         /// @deprecated use create()
-        LiSPSMShadowCameraSetup(Real n = 0.1f, bool useSimpleNOpt = true, Degree angle = Radian(0.451));
+        LiSPSMShadowCameraSetup(Real n = 0.1f, bool useSimpleNOpt = true, Degree angle = Radian(0.451f));
 
         virtual ~LiSPSMShadowCameraSetup();
 
@@ -181,7 +180,7 @@ namespace Ogre
          * @param useSimpleNOpt
          * @param angle camera Light Direction Threshold
          */
-        static ShadowCameraSetupPtr create(Real n = 0.1f, bool useSimpleNOpt = true, Degree angle = Radian(0.451))
+        static ShadowCameraSetupPtr create(Real n = 0.1f, bool useSimpleNOpt = true, Degree angle = Radian(0.451f))
         {
             return std::make_shared<LiSPSMShadowCameraSetup>();
         }

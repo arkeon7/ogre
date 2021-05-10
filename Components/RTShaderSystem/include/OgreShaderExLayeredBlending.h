@@ -36,8 +36,6 @@ THE SOFTWARE.
 namespace Ogre {
 namespace RTShader {
 
-#define SGX_LIB_LAYEREDBLENDING     "SGXLib_LayeredBlending"
-
 /** Texturing sub render state implementation of layered blending.
 Derives from FFPTexturing class which derives from SubRenderState class.
 */
@@ -173,7 +171,7 @@ protected:
                                        int samplerIndex,
                                        const LayerBlendModeEx& blendMode,
                                        const int groupOrder, 
-                                       int targetChannels);
+                                       Operand::OpMask targetChannels);
     /** 
     Adds the function invocation to the pixel shader which will modify
     the blend sources according to the source modification parameters.
@@ -183,7 +181,7 @@ protected:
                                  ParameterPtr arg1,
                                  ParameterPtr arg2,
                                  const int groupOrder, 
-                                 int targetChannels);
+                                 Operand::OpMask targetChannels);
 
     // Attributes.
 protected:

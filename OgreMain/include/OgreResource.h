@@ -29,14 +29,13 @@ THE SOFTWARE.
 #define _Resource_H__
 
 #include "OgrePrerequisites.h"
-#include "OgreAtomicScalar.h"
 #include "OgreStringInterface.h"
 #include "OgreHeaderPrefix.h"
 #include "Threading/OgreThreadHeaders.h"
 
 namespace Ogre {
 
-    typedef unsigned long long int ResourceHandle;
+    typedef size_t ResourceHandle;
 
 
     // Forward declaration
@@ -141,7 +140,7 @@ namespace Ogre {
         /// Numeric handle for more efficient look up than name
         ResourceHandle mHandle;
         /// Is the resource currently loaded?
-        AtomicScalar<LoadingState> mLoadingState;
+        std::atomic<LoadingState> mLoadingState;
         /// Is this resource going to be background loaded? Only applicable for multithreaded
         volatile bool mIsBackgroundLoaded;
         /// Is this file manually loaded?
@@ -152,13 +151,14 @@ namespace Ogre {
         String mOrigin;
         /// Optional manual loader; if provided, data is loaded from here instead of a file
         ManualResourceLoader* mLoader;
+    private:
         /// State count, the number of times this resource has changed state
         size_t mStateCount;
 
         typedef std::set<Listener*> ListenerList;
         ListenerList mListenerList;
         OGRE_MUTEX(mListenerListMutex);
-
+    protected:
         /** Protected unnamed constructor to prevent default construction. 
         */
         Resource() 
@@ -166,6 +166,9 @@ namespace Ogre {
               mIsBackgroundLoaded(0), mIsManual(0), mSize(0), mLoader(0), mStateCount(0)
         { 
         }
+
+        /// protected assignment as this is merely abstract
+        Resource& operator=(const Resource& rhs);
 
         /** Internal hook to perform actions before the load process, but
             after the resource has been marked as 'loading'.
@@ -209,10 +212,13 @@ namespace Ogre {
         */
         virtual void unloadImpl(void) = 0;
 
+        /** Calculate the size of a resource; this will only be called after 'load' */
+        virtual size_t calculateSize(void) const;
     public:
         /** Standard constructor.
         @param creator Pointer to the ResourceManager that is creating this resource
         @param name The unique name of the resource
+        @param handle Handle to the resource
         @param group The name of the resource group to which this resource belongs
         @param isManual Is this resource manually loaded? If so, you should really
             populate the loader parameter in order that the load process
@@ -271,14 +277,14 @@ namespace Ogre {
 
         /** Returns true if the Resource is reloadable, false otherwise.
         */
-        virtual bool isReloadable(void) const
+        bool isReloadable(void) const
         {
             return !mIsManual || mLoader;
         }
 
         /** Is this resource manually loaded?
         */
-        virtual bool isManuallyLoaded(void) const
+        bool isManuallyLoaded(void) const
         {
             return mIsManual;
         }
@@ -290,7 +296,7 @@ namespace Ogre {
 
         /** Retrieves info about the size of the resource.
         */
-        virtual size_t getSize(void) const
+        size_t getSize(void) const
         { 
             return mSize; 
         }
@@ -301,19 +307,13 @@ namespace Ogre {
 
         /** Gets resource name.
         */
-        virtual const String& getName(void) const 
-        { 
-            return mName; 
-        }
+        const String& getName(void) const { return mName; }
 
-        virtual ResourceHandle getHandle(void) const
-        {
-            return mHandle;
-        }
+        ResourceHandle getHandle(void) const { return mHandle; }
 
         /** Returns true if the Resource has been prepared, false otherwise.
         */
-        virtual bool isPrepared(void) const 
+        bool isPrepared(void) const
         { 
             // No lock required to read this state since no modify
             return (mLoadingState.load() == LOADSTATE_PREPARED);
@@ -321,7 +321,7 @@ namespace Ogre {
 
         /** Returns true if the Resource has been loaded, false otherwise.
         */
-        virtual bool isLoaded(void) const 
+        bool isLoaded(void) const
         { 
             // No lock required to read this state since no modify
             return (mLoadingState.load() == LOADSTATE_LOADED);
@@ -330,14 +330,14 @@ namespace Ogre {
         /** Returns whether the resource is currently in the process of
             background loading.
         */
-        virtual bool isLoading() const
+        bool isLoading() const
         {
             return (mLoadingState.load() == LOADSTATE_LOADING);
         }
 
         /** Returns the current loading state.
         */
-        virtual LoadingState getLoadingState() const
+        LoadingState getLoadingState() const
         {
             return mLoadingState.load();
         }
@@ -354,7 +354,7 @@ namespace Ogre {
             other users of this resource should check isLoaded(), and if that
             returns false, don't use the resource and come back later.
         */
-        virtual bool isBackgroundLoaded(void) const { return mIsBackgroundLoaded; }
+        bool isBackgroundLoaded(void) const { return mIsBackgroundLoaded; }
 
         /** Tells the resource whether it is background loaded or not.
 
@@ -364,7 +364,7 @@ namespace Ogre {
             loaded in the background. You should use ResourceBackgroundLoadingQueue
             to manage the actual loading (which will call this method itself).
         */
-        virtual void setBackgroundLoaded(bool bl) { mIsBackgroundLoaded = bl; }
+        void setBackgroundLoaded(bool bl) { mIsBackgroundLoaded = bl; }
 
         /** Escalates the loading of a background loaded resource. 
         @remarks
@@ -388,7 +388,7 @@ namespace Ogre {
         virtual void removeListener(Listener* lis);
 
         /// Gets the group which this resource is a member of
-        virtual const String& getGroup(void) const { return mGroup; }
+        const String& getGroup(void) const { return mGroup; }
 
         /** Change the resource group ownership of a Resource.
         @remarks
@@ -456,20 +456,16 @@ namespace Ogre {
         yourself.
         */
         void _fireUnloadingComplete(void);
-
-        /** Calculate the size of a resource; this will only be called after 'load' */
-        virtual size_t calculateSize(void) const;
-
     };
 
     /** Interface describing a manual resource loader.
-    @remarks
+
         Resources are usually loaded from files; however in some cases you
         want to be able to set the data up manually instead. This provides
         some problems, such as how to reload a Resource if it becomes
         unloaded for some reason, either because of memory constraints, or
         because a device fails and some or all of the data is lost.
-    @par
+
         This interface should be implemented by all classes which wish to
         provide manual data to a resource. They provide a pointer to themselves
         when defining the resource (via the appropriate ResourceManager), 
@@ -489,17 +485,18 @@ namespace Ogre {
         ManualResourceLoader() {}
         virtual ~ManualResourceLoader() {}
 
-        /** Called when a resource wishes to load.  Note that this could get
+        /** Called when a resource wishes to prepare instead of Resource::prepareImpl
+         * @note this could get
          * called in a background thread even in just a semithreaded ogre
-         * (OGRE_THREAD_SUPPORT==2).  Thus, you must not access the rendersystem from
-         * this callback.  Do that stuff in loadResource.
-        @param resource The resource which wishes to load
+         * (OGRE_THREAD_SUPPORT==2).  Thus, you must not access the RenderSystem from
+         * this callback.  Do that stuff in #loadResource.
+        @param resource The resource which wishes to prepare
         */
         virtual void prepareResource(Resource* resource)
                 { (void)resource; }
 
-        /** Called when a resource wishes to prepare.
-        @param resource The resource which wishes to prepare
+        /** Called when a resource wishes to load instead of Resource::loadImpl
+        @param resource The resource which wishes to load
         */
         virtual void loadResource(Resource* resource) = 0;
     };

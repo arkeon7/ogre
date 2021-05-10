@@ -106,10 +106,10 @@ bool ShaderExInstancedViewports::resolveParameters(ProgramSet* programSet)
     // Resolve ps input position in projective space.
     mPSInPositionProjectiveSpace = psMain->resolveInputParameter(mVSOutPositionProjectiveSpace);
     // Resolve vertex shader uniform monitors count
-    mVSInMonitorsCount = vsProgram->resolveParameter(GCT_FLOAT2, -1, (uint16)GPV_GLOBAL, "monitorsCount");
+    mVSInMonitorsCount = vsProgram->resolveParameter(GCT_FLOAT2, "monitorsCount");
 
     // Resolve pixel shader uniform monitors count
-    mPSInMonitorsCount = psProgram->resolveParameter(GCT_FLOAT2, -1, (uint16)GPV_GLOBAL, "monitorsCount");
+    mPSInMonitorsCount = psProgram->resolveParameter(GCT_FLOAT2, "monitorsCount");
 
 
     // Resolve the current world & view matrices concatenated   
@@ -142,18 +142,6 @@ bool ShaderExInstancedViewports::resolveParameters(ProgramSet* programSet)
     // Resolve ps input monitor index.
     mPSInMonitorIndex = psMain->resolveInputParameter(mVSOutMonitorIndex);
 
-    if (!mVSInPosition.get() || !mWorldViewMatrix.get() || !mVSOriginalOutPositionProjectiveSpace.get() ||
-        !mVSOutPositionProjectiveSpace.get() || !mPSInPositionProjectiveSpace.get() || !mVSInMonitorsCount.get() ||
-        !mPSInMonitorsCount.get() || !mVSInMonitorIndex.get() || !mProjectionMatrix.get() || !mVSInViewportOffsetMatrixR0.get() ||
-        !mVSInViewportOffsetMatrixR1.get() || !mVSInViewportOffsetMatrixR2.get() || !mVSInViewportOffsetMatrixR3.get() ||
-        !mVSOutMonitorIndex.get() || !mPSInMonitorIndex.get())
-    {
-        OGRE_EXCEPT( Exception::ERR_INTERNAL_ERROR, 
-                    "Not all parameters could be constructed for the sub-render state.",
-                    "ShaderExInstancedViewports::resolveParameters" );
-    }
-            
-    
     return true;
 }
 
@@ -168,7 +156,6 @@ bool ShaderExInstancedViewports::resolveDependencies(ProgramSet* programSet)
     
     psProgram->addDependency(FFP_LIB_COMMON);
     psProgram->addDependency(SGX_LIB_INSTANCED_VIEWPORTS);
-    psProgram->addPreprocessorDefines("FRAGMENT_PROG"); // needed for GLSL
     
     return true;
 }
@@ -198,7 +185,7 @@ bool ShaderExInstancedViewports::addFunctionInvocations(ProgramSet* programSet)
 //-----------------------------------------------------------------------
 bool ShaderExInstancedViewports::addVSInvocations( Function* vsMain, const int groupOrder )
 {
-    FunctionInvocation* funcInvocation = NULL;
+    FunctionAtom* funcInvocation = NULL;
     
     funcInvocation = OGRE_NEW FunctionInvocation(SGX_FUNC_INSTANCED_VIEWPORTS_TRANSFORM, groupOrder);
     funcInvocation->pushOperand(mVSInPosition, Operand::OPS_IN);
@@ -243,7 +230,7 @@ bool ShaderExInstancedViewports::addPSInvocations( Function* psMain, const int g
     return true;
 }
 //-----------------------------------------------------------------------
-void ShaderExInstancedViewports::updateGpuProgramsParams(Renderable* rend, Pass* pass, const AutoParamDataSource* source, const LightList* pLightList)
+void ShaderExInstancedViewports::updateGpuProgramsParams(Renderable* rend, const Pass* pass, const AutoParamDataSource* source, const LightList* pLightList)
 {
     if (mMonitorsCountChanged)
     {

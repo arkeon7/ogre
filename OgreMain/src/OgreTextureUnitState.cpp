@@ -30,6 +30,7 @@ THE SOFTWARE.
 #include "OgreTextureUnitState.h"
 #include "OgreControllerManager.h"
 #include "OgreTextureManager.h"
+#include "OgreHardwarePixelBuffer.h"
 
 namespace Ogre {
     // allow operation without hardware support
@@ -71,7 +72,7 @@ namespace Ogre {
             setFiltering(FO_LINEAR, FO_LINEAR, FO_LINEAR);
             break;
         case TFO_ANISOTROPIC:
-            setFiltering(FO_ANISOTROPIC, FO_ANISOTROPIC, Root::getSingleton().getRenderSystem()->hasAnisotropicMipMapFilter() ? FO_ANISOTROPIC : FO_LINEAR);
+            setFiltering(FO_ANISOTROPIC, FO_ANISOTROPIC, FO_LINEAR);
             break;
         }
     }
@@ -132,6 +133,7 @@ namespace Ogre {
         , mTexModMatrix(Matrix4::IDENTITY)
         , mBindingType(BT_FRAGMENT)
         , mContentType(CONTENT_NAMED)
+        , mFramePtrs(1)
         , mSampler(TextureManager::getSingletonPtr() ? TextureManager::getSingleton().getDefaultSampler() : DUMMY_SAMPLER)
         , mParent(parent)
         , mAnimController(0)
@@ -243,12 +245,18 @@ namespace Ogre {
     const String& TextureUnitState::getTextureName(void) const
     {
         // Return name of current frame
-        if (mCurrentFrame < mFramePtrs.size())
+        if (mCurrentFrame < mFramePtrs.size() && mFramePtrs[mCurrentFrame])
             return mFramePtrs[mCurrentFrame]->getName();
         else
             return BLANKSTRING;
     }
     //-----------------------------------------------------------------------
+    void TextureUnitState::setTextureName( const String& name)
+    {
+        if(TexturePtr tex = retrieveTexture(name))
+            setTexture(tex);
+    }
+
     void TextureUnitState::setTextureName( const String& name, TextureType texType)
     {
         TexturePtr tex = retrieveTexture(name);
@@ -271,24 +279,18 @@ namespace Ogre {
 
         setContentType(CONTENT_NAMED);
         mTextureLoadFailed = false;
-
-        if (texPtr->getTextureType() == TEX_TYPE_CUBE_MAP)
-        {
-            // delegate to cubic texture implementation
-            setCubicTexture(&texPtr, true);
-            return;
-        }
         
         if (texPtr->getTextureType() == TEX_TYPE_EXTERNAL_OES || texPtr->getTextureType() == TEX_TYPE_2D_RECT)
         {
             setTextureAddressingMode( TAM_CLAMP );
+            setTextureFiltering(FT_MIP, FO_NONE);
         }
 
         mFramePtrs.resize(1);
         mFramePtrs[0] = texPtr;
 
         mCurrentFrame = 0;
-        mCubic = false;
+        mCubic = texPtr->getTextureType() == TEX_TYPE_CUBE_MAP;
 
         // Load immediately ?
         if (isLoaded())
@@ -323,58 +325,6 @@ namespace Ogre {
         return mContentType;
     }
     //-----------------------------------------------------------------------
-    void TextureUnitState::setCubicTextureName( const String& name, bool forUVW)
-    {
-        if (forUVW)
-        {
-            setCubicTextureName(&name, forUVW);
-        }
-        else
-        {
-            String ext;
-            String baseName;
-            StringUtil::splitBaseFilename(name, baseName, ext);
-            ext = "."+ext;
-
-            String fullNames[6];
-            static const char* suffixes[6] = {"_fr", "_bk", "_lf", "_rt", "_up", "_dn"};
-            for (int i = 0; i < 6; ++i)
-            {
-                fullNames[i] = baseName + suffixes[i] + ext;
-            }
-
-            setCubicTextureName(fullNames, forUVW);
-        }
-    }
-    //-----------------------------------------------------------------------
-    void TextureUnitState::setCubicTextureName(const String* const names, bool forUVW)
-    {
-        mFramePtrs.resize(forUVW ? 1 : 6);
-        for (unsigned int i = 0; i < mFramePtrs.size(); ++i)
-        {
-            mFramePtrs[i] = retrieveTexture(names[i]);
-            mFramePtrs[i]->setTextureType(forUVW ? TEX_TYPE_CUBE_MAP : TEX_TYPE_2D);
-        }
-        setCubicTexture(&mFramePtrs[0], forUVW);
-    }
-    //-----------------------------------------------------------------------
-    void TextureUnitState::setCubicTexture( const TexturePtr* const texPtrs, bool forUVW )
-    {
-        setContentType(CONTENT_NAMED);
-        mTextureLoadFailed = false;
-        mFramePtrs.resize(forUVW ? 1 : 6);
-        mAnimDuration = 0;
-        mCurrentFrame = 0;
-        mCubic = true;
-
-        for (unsigned int i = 0; i < mFramePtrs.size(); ++i)
-        {
-            mFramePtrs[i] = texPtrs[i];
-        }
-        // Tell parent we need recompiling, will cause reload too
-        mParent->_notifyNeedsRecompile();
-    }
-    //-----------------------------------------------------------------------
     bool TextureUnitState::isCubic(void) const
     {
         return mCubic;
@@ -387,7 +337,7 @@ namespace Ogre {
     //-----------------------------------------------------------------------
     TextureType TextureUnitState::getTextureType(void) const
     {
-        return mFramePtrs.empty() ? TEX_TYPE_2D : mFramePtrs[0]->getTextureType();
+        return !mFramePtrs[0] ? TEX_TYPE_2D : mFramePtrs[0]->getTextureType();
     }
 
     //-----------------------------------------------------------------------
@@ -460,46 +410,27 @@ namespace Ogre {
         }
     }
 
-    //-----------------------------------------------------------------------
-    void TextureUnitState::setAnimatedTextureName( const String& name, unsigned int numFrames, Real duration)
+    void TextureUnitState::setCubicTextureName(const String* const names, bool forUVW)
     {
-        setContentType(CONTENT_NAMED);
-        mTextureLoadFailed = false;
+        setLayerArrayNames(TEX_TYPE_CUBE_MAP, std::vector<String>(names, names + 6));
+    }
 
-        String ext;
-        String baseName;
+    //-----------------------------------------------------------------------
+    void TextureUnitState::setAnimatedTextureName( const String& name, size_t numFrames, Real duration)
+    {
+        String baseName, ext;
+        StringUtil::splitBaseFilename(name, baseName, ext);
 
-        size_t pos = name.find_last_of('.');
-        baseName = name.substr(0, pos);
-        ext = name.substr(pos);
-
-        // resize pointers, but don't populate until needed
-        mFramePtrs.resize(numFrames);
-        mAnimDuration = duration;
-        mCurrentFrame = 0;
-        mCubic = false;
-
-        for (unsigned int i = 0; i < mFramePtrs.size(); ++i)
+        std::vector<String> names(numFrames);
+        for (uint32 i = 0; i < names.size(); ++i)
         {
-            StringStream str;
-            str << baseName << "_" << i << ext;
-            mFramePtrs[i] = retrieveTexture(str.str());
+            names[i] = StringUtil::format("%s_%u.%s", baseName.c_str(), i, ext.c_str());
         }
 
-        // Load immediately if Material loaded
-        if (isLoaded())
-        {
-            _load();
-        }
-        // Tell parent to recalculate hash
-        if( Pass::getHashFunction() == Pass::getBuiltinHashFunction( Pass::MIN_TEXTURE_CHANGE ) )
-        {
-            mParent->_dirtyHash();
-        }
-
+        setAnimatedTextureName(names, duration);
     }
     //-----------------------------------------------------------------------
-    void TextureUnitState::setAnimatedTextureName(const String* const names, unsigned int numFrames, Real duration)
+    void TextureUnitState::setAnimatedTextureName(const String* const names, size_t numFrames, Real duration)
     {
         setContentType(CONTENT_NAMED);
         mTextureLoadFailed = false;
@@ -526,8 +457,40 @@ namespace Ogre {
             mParent->_dirtyHash();
         }
     }
+    void TextureUnitState::setLayerArrayNames(TextureType type, const std::vector<String>& names)
+    {
+        OgreAssert(!names.empty(), "array layers empty");
+
+        const char* typeName;
+        switch(type)
+        {
+        case TEX_TYPE_CUBE_MAP:
+            typeName = "Cube";
+            break;
+        case TEX_TYPE_2D_ARRAY:
+            typeName = "Array";
+            break;
+        case TEX_TYPE_3D:
+            typeName = "Volume";
+            break;
+        default:
+            OGRE_EXCEPT(Exception::ERR_INVALIDPARAMS, "arrays not possible for this texture type");
+            return;
+        }
+
+        // use hash to auto-name the texture
+        uint32 hash = 0;
+        for(const String& name : names)
+            hash = FastHash(name.data(), name.size(), hash);
+
+        auto tex = retrieveTexture(StringUtil::format("%sTex_%x", typeName, hash));
+        tex->setTextureType(type);
+        tex->setLayerNames(names);
+        setTexture(tex);
+    }
+
     //-----------------------------------------------------------------------
-    std::pair< size_t, size_t > TextureUnitState::getTextureDimensions( unsigned int frame ) const
+    std::pair<uint32, uint32> TextureUnitState::getTextureDimensions(unsigned int frame) const
     {
         
         TexturePtr tex = _getTexturePtr(frame);
@@ -535,7 +498,7 @@ namespace Ogre {
             OGRE_EXCEPT( Exception::ERR_ITEM_NOT_FOUND, "Could not find texture " + StringConverter::toString(frame),
             "TextureUnitState::getTextureDimensions" );
 
-        return std::pair< size_t, size_t >( tex->getWidth(), tex->getHeight() );
+        return {tex->getWidth(), tex->getHeight()};
     }
     //-----------------------------------------------------------------------
     void TextureUnitState::setCurrentFrame(unsigned int frameNumber)
@@ -575,22 +538,24 @@ namespace Ogre {
                 "TextureUnitState::getFrameTextureName");
         }
 
-        return mFramePtrs[frameNumber]->getName();
+        return mFramePtrs[0] ? mFramePtrs[frameNumber]->getName() : BLANKSTRING;
     }
     //-----------------------------------------------------------------------
     void TextureUnitState::setDesiredFormat(PixelFormat desiredFormat)
     {
+        OgreAssert(mFramePtrs[0], "frame must not be blank");
         for(auto& frame : mFramePtrs)
             frame->setFormat(desiredFormat);
     }
     //-----------------------------------------------------------------------
     PixelFormat TextureUnitState::getDesiredFormat(void) const
     {
-        return mFramePtrs.empty() ? PF_UNKNOWN : mFramePtrs[0]->getDesiredFormat();
+        return !mFramePtrs[0] ? PF_UNKNOWN : mFramePtrs[0]->getDesiredFormat();
     }
     //-----------------------------------------------------------------------
     void TextureUnitState::setNumMipmaps(int numMipmaps)
     {
+        OgreAssert(mFramePtrs[0], "frame must not be blank");
         for (auto& frame : mFramePtrs)
             frame->setNumMipmaps(numMipmaps == MIP_DEFAULT
                                      ? TextureManager::getSingleton().getDefaultNumMipmaps()
@@ -599,38 +564,45 @@ namespace Ogre {
     //-----------------------------------------------------------------------
     int TextureUnitState::getNumMipmaps(void) const
     {
-        return mFramePtrs.empty() ? int(MIP_DEFAULT) : mFramePtrs[0]->getNumMipmaps();
+        return !mFramePtrs[0] ? int(MIP_DEFAULT) : mFramePtrs[0]->getNumMipmaps();
     }
     //-----------------------------------------------------------------------
     void TextureUnitState::setIsAlpha(bool isAlpha)
     {
+        OgreAssert(mFramePtrs[0], "frame must not be blank");
+        OGRE_IGNORE_DEPRECATED_BEGIN
         for(auto& frame : mFramePtrs)
             frame->setTreatLuminanceAsAlpha(isAlpha);
+        OGRE_IGNORE_DEPRECATED_END
     }
     //-----------------------------------------------------------------------
     bool TextureUnitState::getIsAlpha(void) const
     {
-        return !mFramePtrs.empty() && mFramePtrs[0]->getTreatLuminanceAsAlpha();
+        OGRE_IGNORE_DEPRECATED_BEGIN
+        return mFramePtrs[0] && mFramePtrs[0]->getTreatLuminanceAsAlpha();
+        OGRE_IGNORE_DEPRECATED_END
     }
     float TextureUnitState::getGamma() const
     {
-        return mFramePtrs.empty() ? 1.0f : mFramePtrs[0]->getGamma();
+        return !mFramePtrs[0] ? 1.0f : mFramePtrs[0]->getGamma();
     }
     void TextureUnitState::setGamma(float gamma)
     {
+        OgreAssert(mFramePtrs[0], "frame must not be blank");
         for(auto& frame : mFramePtrs)
             frame->setGamma(gamma);
     }
     //-----------------------------------------------------------------------
     void TextureUnitState::setHardwareGammaEnabled(bool g)
     {
+        OgreAssert(mFramePtrs[0], "frame must not be blank");
         for(auto& frame : mFramePtrs)
             frame->setHardwareGammaEnabled(g);
     }
     //-----------------------------------------------------------------------
     bool TextureUnitState::isHardwareGammaEnabled() const
     {
-        return !mFramePtrs.empty() && mFramePtrs[0]->isHardwareGammaEnabled();
+        return mFramePtrs[0] && mFramePtrs[0]->isHardwareGammaEnabled();
     }
     //-----------------------------------------------------------------------
     unsigned int TextureUnitState::getTextureCoordSet(void) const
@@ -739,7 +711,7 @@ namespace Ogre {
         }
 
         // Record new effect
-        mEffects.insert(EffectMap::value_type(effect.type, effect));
+        mEffects.emplace(effect.type, effect);
 
     }
     //-----------------------------------------------------------------------
@@ -762,10 +734,7 @@ namespace Ogre {
     //-----------------------------------------------------------------------
     bool TextureUnitState::isBlank(void) const
     {
-        if (mFramePtrs.empty())
-            return true;
-        else
-            return !mFramePtrs[0]|| mTextureLoadFailed;
+        return !mFramePtrs[0] || mTextureLoadFailed;
     }
 
     //-----------------------------------------------------------------------
@@ -1086,10 +1055,6 @@ namespace Ogre {
     //-----------------------------------------------------------------------
     void TextureUnitState::_setTexturePtr(const TexturePtr& texptr, size_t frame)
     {
-        // generated textures (compositors & shadows) are only created at this point
-        if(mFramePtrs.empty() && mContentType != CONTENT_NAMED)
-            mFramePtrs.resize(1);
-
         assert(frame < mFramePtrs.size());
         mFramePtrs[frame] = texptr;
     }
@@ -1303,56 +1268,6 @@ namespace Ogre {
     void TextureUnitState::setName(const String& name)
     {
         mName = name;
-        if (mTextureNameAlias.empty())
-            mTextureNameAlias = mName;
-    }
-
-    //-----------------------------------------------------------------------
-    void TextureUnitState::setTextureNameAlias(const String& name)
-    {
-        mTextureNameAlias = name;
-    }
-
-    //-----------------------------------------------------------------------
-    bool TextureUnitState::applyTextureAliases(const AliasTextureNamePairList& aliasList, const bool apply)
-    {
-        bool testResult = false;
-        // if TUS has an alias see if its in the alias container
-        if (!mTextureNameAlias.empty())
-        {
-            AliasTextureNamePairList::const_iterator aliasEntry =
-                aliasList.find(mTextureNameAlias);
-
-            if (aliasEntry != aliasList.end())
-            {
-                // match was found so change the texture name in mFrames
-                testResult = true;
-
-                if (apply)
-                {
-                    // currently assumes animated frames are sequentially numbered
-                    // cubic, 1d, 2d, and 3d textures are determined from current TUS state
-                    
-                    // if cubic or 3D
-                    if (mCubic)
-                    {
-                        setCubicTextureName(aliasEntry->second, getTextureType() == TEX_TYPE_CUBE_MAP);
-                    }
-                    else
-                    {
-                        // if more than one frame then assume animated frames
-                        if (mFramePtrs.size() > 1)
-                            setAnimatedTextureName(aliasEntry->second, 
-                                static_cast<unsigned int>(mFramePtrs.size()), mAnimDuration);
-                        else
-                            setTextureName(aliasEntry->second, getTextureType());
-                    }
-                }
-                
-            }
-        }
-
-        return testResult;
     }
     //-----------------------------------------------------------------------------
     void TextureUnitState::_notifyParent(Pass* parent)
@@ -1369,28 +1284,9 @@ namespace Ogre {
     //-----------------------------------------------------------------------
     size_t TextureUnitState::calculateSize(void) const
     {
-        size_t memSize = 0;
-
-        memSize += sizeof(unsigned int) * 3;
-        memSize += sizeof(int);
-        memSize += sizeof(float);
-        memSize += sizeof(Real) * 5;
-        memSize += sizeof(bool) * 6;
-        memSize += sizeof(size_t);
-        memSize += sizeof(TextureType);
-        memSize += sizeof(PixelFormat);
-        memSize += sizeof(SamplerPtr);
-        memSize += sizeof(LayerBlendModeEx) * 2;
-        memSize += sizeof(SceneBlendFactor) * 2;
-        memSize += sizeof(Radian);
-        memSize += sizeof(Matrix4);
-        memSize += sizeof(BindingType);
-        memSize += sizeof(ContentType);
-        memSize += sizeof(String) * 4;
-
+        size_t memSize = sizeof(*this);
         memSize += mFramePtrs.size() * sizeof(TexturePtr);
         memSize += mEffects.size() * sizeof(TextureEffect);
-
         return memSize;
     }
 

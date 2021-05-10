@@ -103,7 +103,7 @@ public:
     @param source The auto parameter source.
     @param pLightList The light list used in the current rendering context.
     */
-    virtual void updateGpuProgramsParams(Renderable* rend, Pass* pass,  const AutoParamDataSource* source,  const LightList* pLightList) { }
+    virtual void updateGpuProgramsParams(Renderable* rend, const Pass* pass,  const AutoParamDataSource* source,  const LightList* pLightList) { }
 
     /** Called before adding this sub render state to the given render state.
     Allows this sub render state class to configure specific parameters depending on source pass or parent render state.
@@ -123,6 +123,9 @@ public:
     @see SubRenderStateAccessor.
     */
     SubRenderStateAccessorPtr getAccessor() const;
+
+    /// generic set method for parameters that connot be derived in @ref preAddToRenderState
+    virtual bool setParameter(const String& name, const String& value) { return false; }
 
 // Protected methods
 protected:
