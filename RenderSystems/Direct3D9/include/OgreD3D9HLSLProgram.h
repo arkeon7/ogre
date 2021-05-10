@@ -31,6 +31,8 @@ THE SOFTWARE.
 #include "OgreD3D9Prerequisites.h"
 #include "OgreHighLevelGpuProgram.h"
 
+#include <d3dx9.h>
+
 namespace Ogre {
     /** Specialisation of HighLevelGpuProgram to provide support for D3D9 
         High-Level Shader Language (HLSL).
@@ -52,13 +54,6 @@ namespace Ogre {
         };
         /// Command object for setting target assembler
         class CmdTarget : public ParamCommand
-        {
-        public:
-            String doGet(const void* target) const;
-            void doSet(void* target, const String& val);
-        };
-        /// Command object for setting macro defines
-        class CmdPreprocessorDefines : public ParamCommand
         {
         public:
             String doGet(const void* target) const;
@@ -107,16 +102,14 @@ namespace Ogre {
 
         static CmdEntryPoint msCmdEntryPoint;
         static CmdTarget msCmdTarget;
-        static CmdPreprocessorDefines msCmdPreprocessorDefines;
         static CmdColumnMajorMatrices msCmdColumnMajorMatrices;
         static CmdOptimisation msCmdOptimisation;
         static CmdMicrocode msCmdMicrocode;
         static CmdAssemblerCode msCmdAssemblerCode;
         static CmdBackwardsCompatibility msCmdBackwardsCompatibility;
 
-        /** Internal load implementation, must be implemented by subclasses.
-        */
-        void loadFromSource(void);
+        void prepareImpl();
+        void loadFromSource() {} // all done in prepare
         /** Internal method for creating an appropriate low-level program from this
         high-level program, must be implemented by subclasses. */
         void createLowLevelImpl(void);
@@ -178,7 +171,7 @@ namespace Ogre {
         /** Sets the shader target to compile down to, e.g. 'vs_1_1'. */
         void setTarget(const String& target);
         /** Gets the shader target to compile down to, e.g. 'vs_1_1'. */
-        const String& getTarget(void) const { return mTarget; }
+        const String& getTarget(void) const;
         /** Sets whether matrix packing in column-major order. */ 
         void setColumnMajorMatrices(bool columnMajor) { mColumnMajorMatrices = columnMajor; }
         /** Gets whether matrix packed in column-major order. */

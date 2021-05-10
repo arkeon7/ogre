@@ -30,6 +30,8 @@ THE SOFTWARE.
 #include "OgreOverlayManager.h"
 #include "OgreOverlayContainer.h"
 
+#include <sstream>
+
 namespace Ogre
 {
 //! [font_translate]
@@ -90,8 +92,8 @@ void FontTranslator::parseAttribute(ScriptCompiler* compiler, FontPtr& pFont,
             // Direct character
             cp = val[0];
         }
-        pFont->setGlyphTexCoords(cp, coords[0], coords[1], coords[2], coords[3],
-                                 1.0); // assume image is square
+        pFont->setGlyphInfoFromTexCoords(
+            cp, FloatRect(coords[0], coords[1], coords[2], coords[3])); // assume image is square
     }
     else if (attrib == "antialias_colour")
     {
@@ -124,6 +126,8 @@ void FontTranslator::parseAttribute(ScriptCompiler* compiler, FontPtr& pFont,
             }
         }
     }
+    else if(attrib == "character_spacer")
+        compiler->addError(ScriptCompiler::CE_DEPRECATEDSYMBOL, prop->file, prop->line, attrib);
     else if (prop->values.empty() || !getString(prop->values.front(), &val) ||
              !pFont->setParameter(attrib, val))
     {
@@ -189,7 +193,7 @@ void ElementTranslator::translate(ScriptCompiler* compiler, const AbstractNodePt
     }
 
     if(newElement->isContainer())
-        obj->context = Any((OverlayContainer*)newElement);
+        obj->context = (OverlayContainer*)newElement;
 
     String val;
     for (auto& c : obj->children)
@@ -238,7 +242,7 @@ void OverlayTranslator::translate(ScriptCompiler* compiler, const AbstractNodePt
     Overlay* overlay = OverlayManager::getSingleton().create(name);
     overlay->_notifyOrigin(obj->file);
 
-    obj->context = Any(overlay);
+    obj->context = overlay;
 
     for (auto& c : obj->children)
     {

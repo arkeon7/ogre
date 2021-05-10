@@ -36,24 +36,22 @@ THE SOFTWARE.
 namespace Ogre {
     /** Specialisation of HighLevelGpuProgram to provide support for OpenGL
         Shader Language (GLSL).
-    @remarks
+
         GLSL has no target assembler or entry point specification like DirectX 9 HLSL.
-        Vertex and Fragment shaders only have one entry point called "main".  
+        Vertex and Fragment shaders only have one entry point called "main".
         When a shader is compiled, microcode is generated but can not be accessed by
         the application.
-        GLSL also does not provide assembler low level output after compiling.  The GL Render
-        system assumes that the Gpu program is a GL Gpu program so GLSLProgram will create a 
-        GLSLGpuProgram that is subclassed from GLGpuProgram for the low level implementation.
-        The GLSLProgram class will create a shader object and compile the source but will
-        not create a program object.  It's up to GLSLGpuProgram class to request a program object
-        to link the shader object to.
+        GLSL also does not provide assembler low level output after compiling. Therefore the GLSLShader will also stand in
+        for the low level implementation.
+        The GLSLProgram class will create a shader object and compile the source but will not
+        create a program object.  It's up to the GLSLProgramManager to request a program object to link the shader object to.
 
     @note
         GLSL supports multiple modular shader objects that can be attached to one program
         object to form a single shader.  This is supported through the "attach" material script
         command.  All the modules to be attached are listed on the same line as the attach command
         separated by white space.
-        
+
     */
     class GLSLShaderCommon : public HighLevelGpuProgram
     {
@@ -77,23 +75,12 @@ namespace Ogre {
             const String& name, ResourceHandle handle,
             const String& group, bool isManual, ManualResourceLoader* loader);
 
-        virtual bool compile( bool checkErrors = false) = 0;
         virtual void attachToProgramObject(const uint programObject) = 0;
         virtual void detachFromProgramObject(const uint programObject) = 0;
 
         String getAttachedShaderNames() const { return mAttachedShaderNames; }
 
         /// Overridden
-        bool getPassTransformStates(void) const {
-            return true;
-        }
-        bool getPassSurfaceAndLightStates(void) const {
-            return true;
-        }
-        bool getPassFogStates(void) const {
-            return true;
-        }
-
         /** Attach another GLSL Shader to this one. */
         void attachChildShader(const String& name);
 
@@ -102,104 +89,34 @@ namespace Ogre {
         /** Gets whether matrix packed in column-major order. */
         bool getColumnMajorMatrices(void) const { return mColumnMajorMatrices; }
 
-        /** Returns the operation type that this geometry program expects to
-            receive as input
-        */
-        RenderOperation::OperationType getInputOperationType(void) const
-        { return mInputOperationType; }
-        /** Returns the operation type that this geometry program will emit
-        */
-        RenderOperation::OperationType getOutputOperationType(void) const
-        { return mOutputOperationType; }
-        /** Returns the maximum number of vertices that this geometry program can
-            output in a single run
-        */
-        int getMaxOutputVertices(void) const { return mMaxOutputVertices; }
+        /// Only used for separable programs.
+        virtual bool linkSeparable() { return false; }
 
-        /** Sets the operation type that this geometry program expects to receive
-        */
-        void setInputOperationType(RenderOperation::OperationType operationType)
-        { mInputOperationType = operationType; }
-        /** Set the operation type that this geometry program will emit
-        */
-        void setOutputOperationType(RenderOperation::OperationType operationType)
-        { mOutputOperationType = operationType; }
-        /** Set the maximum number of vertices that a single run of this geometry program
-            can emit.
-        */
-        void setMaxOutputVertices(int maxOutputVertices)
-        { mMaxOutputVertices = maxOutputVertices; }
-
-        /** Return the shader link status.
-            Only used for separable programs.
-        */
-        int isLinked(void) { return mLinked; }
-
-        /** Set the shader link status.
-            Only used for separable programs.
-        */
-        void setLinked(int flag) { mLinked = flag; }
+        /// reset link status of separable program
+        void resetLinked() { mLinked = 0; }
 
         /// Get the OGRE assigned shader ID.
         uint getShaderID(void) const { return mShaderID; }
 
+        /// If we are using program pipelines, the OpenGL program handle
+        uint getGLProgramHandle() const { return mGLProgramHandle; }
+
         /// Get the uniform cache for this shader
         GLUniformCache*    getUniformCache(){return &mUniformCache;}
 
-        /// Command object for setting macro defines
-        class CmdPreprocessorDefines : public ParamCommand
-        {
-        public:
-            String doGet(const void* target) const;
-            void doSet(void* target, const String& val);
-        };
-        /// Command object for setting the input operation type (geometry shader only)
-        class CmdInputOperationType : public ParamCommand
-        {
-        public:
-            String doGet(const void* target) const;
-            void doSet(void* target, const String& val);
-        };
-        /// Command object for setting the output operation type (geometry shader only)
-        class CmdOutputOperationType : public ParamCommand
-        {
-        public:
-            String doGet(const void* target) const;
-            void doSet(void* target, const String& val);
-        };
-        /// Command object for setting the maximum output vertices (geometry shader only)
-        class CmdMaxOutputVertices : public ParamCommand
-        {
-        public:
-            String doGet(const void* target) const;
-            void doSet(void* target, const String& val);
-        };
+        /// GLSL does not provide access to the low level code of the shader, so use this shader for binding as well
+        GpuProgram* _getBindingDelegate(void) { return this; }
     protected:
-        static CmdPreprocessorDefines msCmdPreprocessorDefines;
+        /// GLSL does not provide access to the low level implementation of the shader, so this method s a no-op
+        void createLowLevelImpl() {}
+
         static CmdAttach msCmdAttach;
         static CmdColumnMajorMatrices msCmdColumnMajorMatrices;
-        static CmdInputOperationType msInputOperationTypeCmd;
-        static CmdOutputOperationType msOutputOperationTypeCmd;
-        static CmdMaxOutputVertices msMaxOutputVerticesCmd;
 
         String getResourceLogName() const;
 
-        /** Internal load implementation, must be implemented by subclasses.
-        */
-        void loadFromSource(void);
+        void prepareImpl(void);
 
-        /// Overridden from HighLevelGpuProgram
-        void unloadImpl(void);
-
-        /// Populate the passed parameters with name->index map
-        void populateParameterNames(GpuProgramParametersSharedPtr params);
-
-        /// The input operation type for this (geometry) program
-        RenderOperation::OperationType mInputOperationType;
-        /// The output operation type for this (geometry) program
-        RenderOperation::OperationType mOutputOperationType;
-        /// The maximum amount of vertices that this (geometry) program can output
-        int mMaxOutputVertices;
         /// Attached Shader names
         String mAttachedShaderNames;
         /// Container of attached programs
@@ -216,6 +133,13 @@ namespace Ogre {
 
         /// OGRE assigned shader ID.
         uint mShaderID;
+
+        /// GL handle for shader object.
+        uint mGLShaderHandle;
+        /// GL handle for program object the shader is bound to.
+        uint mGLProgramHandle;
+
+        int mShaderVersion;
 
         /// Pointer to the uniform cache for this shader
         GLUniformCache    mUniformCache;

@@ -45,7 +45,7 @@ PROJECT_BRIEF          = "Object-Oriented Graphics Rendering Engine"
 # exceed 55 pixels and the maximum width should not exceed 200 pixels.
 # Doxygen will copy the logo to the output directory.
 
-PROJECT_LOGO           = "Docs/ogre-logo-wetfloor.gif"
+PROJECT_LOGO           = "Docs/ogre-logo.png"
 
 # The OUTPUT_DIRECTORY tag is used to specify the (relative or absolute)
 # base path where the generated documentation will be put.
@@ -123,7 +123,7 @@ ALWAYS_DETAILED_SEC    = YES
 # members were ordinary class members. Constructors, destructors and assignment
 # operators of the base classes will not be shown.
 
-INLINE_INHERITED_MEMB  = YES
+INLINE_INHERITED_MEMB  = NO
 
 # If the FULL_PATH_NAMES tag is set to YES then Doxygen will prepend the full
 # path before files name in the file list and in the header files. If set
@@ -205,7 +205,8 @@ TAB_SIZE               = 4
 # will result in a user-defined paragraph with heading "Side Effects:".
 # You can put \n's in the value part of an alias to insert newlines.
 
-ALIASES                =
+ALIASES                =  ffp_rtss_only="@note Only has an effect with the fixed-function pipeline or the @ref rtss"
+ALIASES               +=  shaderparam="@note When using shader programs, you have to explicitely forward this property in the @ref Program-Parameter-Specification"
 
 # This tag can be used to specify a number of word-keyword mappings (TCL only).
 # A mapping has the form "name=value". For example adding
@@ -419,7 +420,7 @@ HIDE_UNDOC_CLASSES     = NO
 # If set to NO (the default) these declarations will be included in the
 # documentation.
 
-HIDE_FRIEND_COMPOUNDS  = NO
+HIDE_FRIEND_COMPOUNDS  = YES
 
 # If the HIDE_IN_BODY_DOCS tag is set to YES, Doxygen will hide any
 # documentation blocks found inside the body of a function.
@@ -690,14 +691,18 @@ INPUT                  = OgreMain/include \
                             Docs/src/tutorials/deferred.md \
                             Docs/src/tutorials/external_texture.md \
                             Docs/src/tutorials/manualmesh.md \
+                            Docs/src/tutorials/meshlod.md \
                             Docs/src/tutorials/numpy.md \
                             Docs/src/tutorials/profiler.md \
+                            Docs/src/tutorials/background-resource.md \
+                            Docs/src/tutorials/reversed-depth.md \
                             Docs/src/tutorials/setup.md \
                             Docs/src/tutorials/trays.md \
                             Docs/src/tutorials/tutorials.md \
                             Docs/src/tutorials/volume.md \
                             Docs/src/tutorials/basictutorials/basictutorial1.md \
-                            Docs/src/tutorials/basictutorials/basictutorial2.md
+                            Docs/src/tutorials/basictutorials/basictutorial2.md \
+                            Docs/src/tutorials/basictutorials/basictutorial3.md
 
 # This tag can be used to specify the character encoding of the source files
 # that doxygen parses. Internally doxygen uses the UTF-8 encoding, which is
@@ -748,6 +753,8 @@ EXCLUDE_PATTERNS       = *UTF* \
                          */GLSupport/include/GLX/* \
                          */GLSupport/include/OSX/* \
                          */GLSupport/include/win32/* \
+                         */include/Threading/* \
+                         */OgreMemoryAllocatorConfig.h \
                          *EAGL* \
                          */RenderSystems/GLES/*
 
@@ -757,7 +764,7 @@ EXCLUDE_PATTERNS       = *UTF* \
 # wildcard * is used, a substring. Examples: ANamespace, AClass,
 # AClass::ANamespace, ANamespace::*Test
 
-EXCLUDE_SYMBOLS        =
+EXCLUDE_SYMBOLS        = Ogre::AllocatedObject Ogre::ParamCommand
 
 # The EXAMPLE_PATH tag can be used to specify one or more files or
 # directories that contain example code fragments that are included (see
@@ -1229,7 +1236,14 @@ PREDEFINED             = OGRE_MEMORY_ALLOCATOR=1 \
                          RTSHADER_SYSTEM_BUILD_EXT_SHADERS \
                          OGRE_PLATFORM=10 \
                          OGRE_DEPRECATED= \
+                         OGRE_NODISCARD= \
+                         OGRE_NORETURN= \
+                         DECL_MALLOC= \
+                         OGRE_FORCE_INLINE=inline \
+                         OGRE_NODELESS_POSITIONING= \
                          MANAGED_RESOURCE= \
+                         OGRE_AUTO_MUTEX= \
+                         OGRE_FORMAT_PRINTF=;// \
                          OGRE_RESOURCE_GROUP_INIT==RGN_DEFAULT \
                          protected=private
 

@@ -29,7 +29,7 @@ THE SOFTWARE.
 
 #include "OgreShaderPrerequisites.h"
 #include "OgreShaderSubRenderState.h"
-#include "OgreVector4.h"
+#include "OgreVector.h"
 #include "OgreLight.h"
 #include "OgreCommon.h"
 
@@ -58,7 +58,7 @@ public:
     /** 
     @see SubRenderState::updateGpuProgramsParams.
     */
-    virtual void updateGpuProgramsParams(Ogre::Renderable* rend, Ogre::Pass* pass, const Ogre::AutoParamDataSource* source, const Ogre::LightList* pLightList);
+    virtual void updateGpuProgramsParams(Ogre::Renderable* rend, const Ogre::Pass* pass, const Ogre::AutoParamDataSource* source, const Ogre::LightList* pLightList);
 
     /** 
     @see SubRenderState::copyFrom.

@@ -24,14 +24,6 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 -----------------------------------------------------------------------------
-PCZSceneManager.h  -  Portal Connected Zone Scene Manager
-
------------------------------------------------------------------------------
-begin                : Mon Feb 19 2007
-author               : Eric Cha
-email                : ericc@xenopi.com
-Code Style Update    :
------------------------------------------------------------------------------
 */
 
 #ifndef PCZ_SCENEMANAGER_H
@@ -376,8 +368,6 @@ namespace Ogre
         virtual void findLightsAffectingFrustum(const Camera* camera);
         /// Internal method for creating shadow textures (texture-based shadows)
         virtual void ensureShadowTexturesCreated();
-        /// Internal method for destroying shadow textures (texture-based shadows)
-        virtual void destroyShadowTextures(void);
         /// Internal method for firing the pre caster texture shadows event
         virtual void fireShadowTexturesPreCaster(Light* light, Camera* camera, size_t iteration);
     };

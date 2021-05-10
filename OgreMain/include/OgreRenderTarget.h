@@ -375,32 +375,16 @@ namespace Ogre {
         */
         virtual uint getFSAA() const { return mFSAA; }
 
-        /** Gets the FSAA hint (@see Root::createRenderWindow)
-        */
+        /// RenderSystem specific FSAA option. See @ref RenderSystem::_createRenderWindow for details.
         virtual const String& getFSAAHint() const { return mFSAAHint; }
 
         /** Set the level of multisample AA to be used if hardware support it.
             This option will be ignored if the hardware does not support it 
             or setting can not be changed on the fly on per-target level. 
             @param fsaa The number of samples
-            @param fsaaHint Any hinting text (@see Root::createRenderWindow)
+            @param fsaaHint @copybrief getFSAAHint
         */
         virtual void setFSAA(uint fsaa, const String& fsaaHint) { }
-
-        /** RenderSystem specific interface for a RenderTarget;
-            this should be subclassed by RenderSystems.
-        */
-        class Impl
-        {
-        protected:
-            ~Impl() { }
-        };
-        /** Get rendersystem specific interface for this RenderTarget.
-            This is used by the RenderSystem to (un)bind this target, 
-            and to get specific information like surfaces
-            and framebuffer objects.
-        */
-        virtual Impl *_getImpl();
 
         /** Method for manual management of rendering : fires 'preRenderTargetUpdate'
             and initialises statistics etc.

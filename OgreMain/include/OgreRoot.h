@@ -33,6 +33,7 @@ THE SOFTWARE.
 #include "OgreSceneManagerEnumerator.h"
 
 #include <exception>
+#include <deque>
 #include "OgreHeaderPrefix.h"
 
 namespace Ogre
@@ -45,6 +46,7 @@ namespace Ogre
     */
 
     class AndroidLogListener;
+    class ShadowTextureManager;
 
     typedef std::vector<RenderSystem*> RenderSystemList;
     
@@ -66,7 +68,11 @@ namespace Ogre
         // To allow update of active renderer if
         // RenderSystem::initialise is used directly
         friend class RenderSystem;
-    protected:
+    public:
+        typedef std::map<String, MovableObjectFactory*> MovableObjectFactoryMap;
+        typedef std::vector<DynLib*> PluginLibList;
+        typedef std::vector<Plugin*> PluginInstanceList;
+    private:
         RenderSystemList mRenderers;
         RenderSystem* mActiveRenderer;
         String mVersion;
@@ -97,7 +103,6 @@ namespace Ogre
         std::unique_ptr<ArchiveFactory> mZipArchiveFactory;
         std::unique_ptr<ArchiveManager> mArchiveManager;
 
-        typedef std::map<String, MovableObjectFactory*> MovableObjectFactoryMap;
         MovableObjectFactoryMap mMovableObjectFactoryMap;
         std::unique_ptr<MovableObjectFactory> mRibbonTrailFactory;
         std::unique_ptr<MovableObjectFactory> mBillboardChainFactory;
@@ -115,12 +120,9 @@ namespace Ogre
         std::unique_ptr<RenderSystemCapabilitiesManager> mRenderSystemCapabilitiesManager;
 
         std::unique_ptr<SceneManagerEnumerator> mSceneManagerEnum;
-        typedef std::deque<SceneManager*> SceneManagerStack;
-        SceneManagerStack mSceneManagerStack;
+        SceneManager* mCurrentSceneManager;
 
         std::unique_ptr<ShadowTextureManager> mShadowTextureManager;
-
-        std::unique_ptr<SceneLoaderManager> mSceneLoaderManager;
 
         RenderWindow* mAutoWindow;
 
@@ -129,10 +131,7 @@ namespace Ogre
         bool mRemoveQueueStructuresOnClear;
         Real mDefaultMinPixelSize;
 
-    public:
-        typedef std::vector<DynLib*> PluginLibList;
-        typedef std::vector<Plugin*> PluginInstanceList;
-    protected:
+    private:
         /// List of plugin DLLs loaded
         PluginLibList mPluginLibs;
         /// List of Plugin instances registered
@@ -322,6 +321,8 @@ namespace Ogre
                 Root::createRenderWindow). The window will be
                 created based on the options currently set on the render
                 system.
+            @param windowTitle
+            @param customCapabilitiesConfig see #useCustomRenderSystemCapabilities
             @return
                 A pointer to the automatically created window, if
                 requested, otherwise <b>NULL</b>.
@@ -362,7 +363,7 @@ namespace Ogre
         /// @copydoc SceneManagerEnumerator::getMetaData(const String& )const
         const SceneManagerMetaData* getSceneManagerMetaData(const String& typeName) const;
 
-        /// @copydoc SceneManagerEnumerator::getMetaData()
+        /// @copydoc SceneManagerEnumerator::getMetaData()const
         const SceneManagerEnumerator::MetaDataList& getSceneManagerMetaData() const;
 
         /// @copydoc SceneManagerEnumerator::getMetaDataIterator
@@ -555,15 +556,8 @@ namespace Ogre
         static DataStreamPtr openFileStream(const String& filename,
                 const String& groupName = ResourceGroupManager::DEFAULT_RESOURCE_GROUP_NAME);
 
-        /** Generates a packed data version of the passed in ColourValue suitable for
-            use with the current RenderSystem.
-        @remarks
-            Since different render systems have different colour data formats (eg
-            RGBA for GL, ARGB for D3D) this method allows you to use 1 method for all.
-        @param colour The colour to convert
-        @param pDest Pointer to location to put the result.
-        */
-        void convertColourValue(const ColourValue& colour, uint32* pDest);
+        /// @deprecated use ColourValue::getAsBYTE()
+        OGRE_DEPRECATED static void convertColourValue(const ColourValue& colour, uint32* pDest) { *pDest = colour.getAsBYTE(); }
 
         /** Retrieves a pointer to the window that was created automatically
             @remarks
@@ -580,9 +574,15 @@ namespace Ogre
         RenderWindow* createRenderWindow(const String &name, unsigned int width, unsigned int height, 
             bool fullScreen, const NameValuePairList *miscParams = 0) ;
 
-        /** @copydoc RenderSystem::_createRenderWindows
-        */
-        bool createRenderWindows(const RenderWindowDescriptionList& renderWindowDescriptions,
+        /// @overload
+        RenderWindow* createRenderWindow(const RenderWindowDescription& desc)
+        {
+            return createRenderWindow(desc.name, desc.width, desc.height,
+                                      desc.useFullScreen, &desc.miscParams);
+        }
+
+        /// @deprecated call createRenderWindow multiple times
+        OGRE_DEPRECATED bool createRenderWindows(const RenderWindowDescriptionList& renderWindowDescriptions,
             RenderWindowList& createdWindows);
     
         /** Detaches a RenderTarget from the active render system
@@ -770,17 +770,12 @@ namespace Ogre
             This is only intended for internal use; it is only valid during the
             rendering of a frame.
         */
-        SceneManager* _getCurrentSceneManager(void) const;
-        /** Pushes the scene manager currently being used to render.
+        SceneManager* _getCurrentSceneManager(void) const { return mCurrentSceneManager; }
+        /** Sets the scene manager currently being used to render.
         @remarks
             This is only intended for internal use.
         */
-        void _pushCurrentSceneManager(SceneManager* sm);
-        /** Pops the scene manager currently being used to render.
-        @remarks
-        This is only intended for internal use.
-        */
-        void _popCurrentSceneManager(SceneManager* sm);
+        void _setCurrentSceneManager(SceneManager* sm) { mCurrentSceneManager = sm; }
 
         /** Internal method used for updating all RenderTarget objects (windows, 
             renderable textures etc) which are set to auto-update.
@@ -902,12 +897,16 @@ namespace Ogre
         /** Return an iterator over all the MovableObjectFactory instances currently
             registered.
         */
-        MovableObjectFactoryIterator getMovableObjectFactoryIterator(void) const;
+        const MovableObjectFactoryMap& getMovableObjectFactories() const
+        {
+            return mMovableObjectFactoryMap;
+        }
 
-        /**
-        * Gets the number of display monitors.
-        */
-        unsigned int getDisplayMonitorCount() const;
+        /// @deprecated use getMovableObjectFactories
+        OGRE_DEPRECATED MovableObjectFactoryIterator getMovableObjectFactoryIterator(void) const;
+
+        /// @deprecated do not use
+        OGRE_DEPRECATED unsigned int getDisplayMonitorCount() const;
 
         /** Get the WorkQueue for processing background tasks.
             You are free to add new requests and handlers to this queue to

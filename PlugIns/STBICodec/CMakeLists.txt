@@ -13,7 +13,7 @@ set(SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/OgreSTBICodec.cpp")
 
 if(UNIX)
   set_source_files_properties(src/OgreSTBICodec.cpp PROPERTIES  
-    COMPILE_FLAGS "-Wno-cast-qual -Wno-unused-function -Wno-shadow -Wno-missing-declarations")
+    COMPILE_FLAGS "-Wno-cast-qual -Wno-unused-function -Wno-missing-declarations -Wno-type-limits")
 endif()
 
 add_library(Codec_STBI ${OGRE_LIB_TYPE} ${HEADER_FILES} ${SOURCES})
@@ -27,7 +27,9 @@ if(CMAKE_COMPILER_IS_GNUCXX)
   # workaround gcc5 bug on Ubuntu 16.04 regarding __builtin_cpu_supports
   target_link_libraries(Codec_STBI PRIVATE gcc)
 endif()
-if(OGRE_CONFIG_ENABLE_ZIP)
+
+if(ZLIB_FOUND)
+  target_compile_definitions(Codec_STBI PRIVATE HAVE_ZLIB)
   target_link_libraries(Codec_STBI PRIVATE ZLIB::ZLIB)
 endif()
 

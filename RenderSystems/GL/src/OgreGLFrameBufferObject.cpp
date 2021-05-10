@@ -100,7 +100,9 @@ namespace Ogre {
         uint32 width = mColour[0].buffer->getWidth();
         uint32 height = mColour[0].buffer->getHeight();
         GLuint format = mColour[0].buffer->getGLFormat();
-        ushort maxSupportedMRTs = Root::getSingleton().getRenderSystem()->getCapabilities()->getNumMultiRenderTargets();
+
+        auto rsc = Root::getSingleton().getRenderSystem()->getCapabilities();
+        ushort maxSupportedMRTs = rsc->getNumMultiRenderTargets();
 
         // Bind simple buffer to add colour attachments
         glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, mFB);
@@ -122,7 +124,7 @@ namespace Ogre {
                     ss << ".";
                     OGRE_EXCEPT(Exception::ERR_INVALIDPARAMS, ss.str(), "GLFrameBufferObject::initialise");
                 }
-                if(mColour[x].buffer->getGLFormat() != format)
+                if (!rsc->hasCapability(RSC_MRT_DIFFERENT_BIT_DEPTHS) && mColour[x].buffer->getGLFormat() != format)
                 {
                     StringStream ss;
                     ss << "Attachment " << x << " has incompatible format.";
@@ -190,17 +192,6 @@ namespace Ogre {
                 // In this case, the capabilities will not show more than 1 simultaneaous render target.
                 glDrawBuffer(bufs[0]);
         }
-
-        if (mMultisampleFB)
-        {
-            // we need a read buffer because we'll be blitting to mFB
-            glReadBuffer(bufs[0]);
-        }
-        else
-        {
-            // No read buffer, by default, if we want to read anyway we must not forget to set this.
-            glReadBuffer(GL_NONE);
-        }
         
         // Check status
         GLuint status;
@@ -260,8 +251,8 @@ namespace Ogre {
 
         if( glDepthBuffer )
         {
-            GLRenderBuffer *depthBuf   = glDepthBuffer->getDepthBuffer();
-            GLRenderBuffer *stencilBuf = glDepthBuffer->getStencilBuffer();
+            auto *depthBuf   = glDepthBuffer->getDepthBuffer();
+            auto *stencilBuf = glDepthBuffer->getStencilBuffer();
 
             // Attach depth buffer, if it has one.
             if( depthBuf )

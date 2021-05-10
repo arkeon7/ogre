@@ -30,8 +30,7 @@ THE SOFTWARE.
 
 #include "OgrePrerequisites.h"
 #include "OgreRenderOperation.h"
-#include "OgreVector2.h"
-#include "OgreVector3.h"
+#include "OgreVector.h"
 #include "OgreHeaderPrefix.h"
 
 namespace Ogre
@@ -179,7 +178,7 @@ namespace Ogre
             unsigned short sourceTexCoordSet = 0, unsigned short index = 1);
 
 
-    protected:
+    private:
 
         VertexData* mVData;
         typedef std::vector<IndexData*> IndexDataList;

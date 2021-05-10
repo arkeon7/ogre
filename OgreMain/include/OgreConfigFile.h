@@ -32,10 +32,10 @@ THE SOFTWARE.
 
 #include "OgreCommon.h"
 #include "OgreStringVector.h"
-#include "OgreIteratorWrappers.h"
 #include "OgreHeaderPrefix.h"
 
 namespace Ogre {
+    template <typename T> class MapIterator;
 
     /** \addtogroup Core
     *  @{

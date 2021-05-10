@@ -31,7 +31,6 @@ THE SOFTWARE.
 #include "OgrePVRTCCodec.h"
 #include "OgreImage.h"
 
-#define FOURCC(c0, c1, c2, c3) (c0 | (c1 << 8) | (c2 << 16) | (c3 << 24))
 #define PVR_TEXTURE_FLAG_TYPE_MASK  0xff
 
 namespace Ogre {
@@ -137,22 +136,6 @@ namespace Ogre {
     PVRTCCodec::PVRTCCodec():
         mType("pvr")
     { 
-    }
-    //---------------------------------------------------------------------
-    DataStreamPtr PVRTCCodec::encode(const MemoryDataStreamPtr& input,
-                                     const Codec::CodecDataPtr& pData) const
-    {
-        OGRE_EXCEPT(Exception::ERR_NOT_IMPLEMENTED,
-                    "PVRTC encoding not supported",
-                    "PVRTCCodec::encode" ) ;
-    }
-    //---------------------------------------------------------------------
-    void PVRTCCodec::encodeToFile(const MemoryDataStreamPtr& input, const String& outFileName,
-                                  const Codec::CodecDataPtr& pData) const
-    {
-        OGRE_EXCEPT(Exception::ERR_NOT_IMPLEMENTED,
-                    "PVRTC encoding not supported",
-                    "PVRTCCodec::encodeToFile" ) ;
     }
     //---------------------------------------------------------------------
     Codec::DecodeResult PVRTCCodec::decode(const DataStreamPtr& stream) const
@@ -343,20 +326,6 @@ namespace Ogre {
     String PVRTCCodec::getType() const 
     {
         return mType;
-    }
-    //---------------------------------------------------------------------    
-    void PVRTCCodec::flipEndian(void * pData, size_t size, size_t count)
-    {
-#if OGRE_ENDIAN == OGRE_ENDIAN_BIG
-		Bitwise::bswapChunks(pData, size, count);
-#endif
-    }
-    //---------------------------------------------------------------------    
-    void PVRTCCodec::flipEndian(void * pData, size_t size)
-    {
-#if OGRE_ENDIAN == OGRE_ENDIAN_BIG
-        Bitwise::bswapBuffer(pData, size);
-#endif
     }
     //---------------------------------------------------------------------
     String PVRTCCodec::magicNumberToFileExt(const char *magicNumberPtr, size_t maxbytes) const

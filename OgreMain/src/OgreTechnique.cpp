@@ -138,44 +138,25 @@ namespace Ogre {
 
                 // Check a few fixed-function options in texture layers
                 size_t texUnit = 0;
-                Pass::TextureUnitStates::const_iterator it;
-                for(it = currPass->getTextureUnitStates().begin(); it != currPass->getTextureUnitStates().end(); ++it)
+                for(const TextureUnitState* tex : currPass->getTextureUnitStates())
                 {
-                    TextureUnitState* tex = *it;
-                    // Any Cube textures? NB we make the assumption that any
-                    // card capable of running fragment programs can support
-                    // cubic textures, which has to be true, surely?
-                    if (tex->is3D() && !caps->hasCapability(RSC_CUBEMAPPING))
+                    String err;
+                    if ((tex->getTextureType() == TEX_TYPE_3D) && !caps->hasCapability(RSC_TEXTURE_3D))
                     {
-                        // Fail
-                        compileErrors << "Pass " << passNum <<
-                            " Tex " << texUnit <<
-                            ": Cube maps not supported by current environment."
-                            << std::endl;
-                        return false;
+                        err = "Volume textures";
                     }
-                    // Any 3D textures? NB we make the assumption that any
-                    // card capable of running fragment programs can support
-                    // 3D textures, which has to be true, surely?
-                    if (((tex->getTextureType() == TEX_TYPE_3D) || (tex->getTextureType() == TEX_TYPE_2D_ARRAY)) &&
-                        !caps->hasCapability(RSC_TEXTURE_3D))
+
+                    if ((tex->getTextureType() == TEX_TYPE_2D_ARRAY) &&
+                        !caps->hasCapability(RSC_TEXTURE_2D_ARRAY))
                     {
-                        // Fail
-                        compileErrors << "Pass " << passNum <<
-                            " Tex " << texUnit <<
-                            ": Volume textures not supported by current environment."
-                            << std::endl;
-                        return false;
+                        err = "Array textures";
                     }
-                    // Any Dot3 blending?
-                    if (tex->getColourBlendMode().operation == LBX_DOTPRODUCT &&
-                        !caps->hasCapability(RSC_DOT3))
+
+                    if (!err.empty())
                     {
                         // Fail
-                        compileErrors << "Pass " << passNum <<
-                            " Tex " << texUnit <<
-                            ": DOT3 blending not supported by current environment."
-                            << std::endl;
+                        compileErrors << "Pass " << passNum << " Tex " << texUnit << ": " << err
+                                      << " not supported by current environment.";
                         return false;
                     }
                     ++texUnit;
@@ -217,7 +198,9 @@ namespace Ogre {
                         compileErrors << "Pass " << passNum <<
                             ": " << GpuProgram::getProgramTypeName(programType) + " program " << program->getName()
                             << " cannot be used - ";
-                        if (program->hasCompileError())
+                        if (program->hasCompileError() && program->getSource().empty())
+                            compileErrors << "resource not found.";
+                        else if (program->hasCompileError())
                             compileErrors << "compile error.";
                         else
                             compileErrors << "not supported.";
@@ -1207,23 +1190,6 @@ namespace Ogre {
     const String& Technique::getResourceGroup(void) const
     {
         return mParent->getGroup();
-    }
-
-    //-----------------------------------------------------------------------
-    bool Technique::applyTextureAliases(const AliasTextureNamePairList& aliasList, const bool apply) const
-    {
-        // iterate through passes and apply texture alias
-        Passes::const_iterator i, iend;
-        iend = mPasses.end();
-        bool testResult = false;
-
-        for(i = mPasses.begin(); i != iend; ++i)
-        {
-            if ((*i)->applyTextureAliases(aliasList, apply))
-                testResult = true;
-        }
-
-        return testResult;
     }
     //-----------------------------------------------------------------------
     Ogre::MaterialPtr  Technique::getShadowCasterMaterial() const 

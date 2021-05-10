@@ -34,6 +34,8 @@ THE SOFTWARE.
 #include "OgreCompositionTechnique.h"
 #include "OgreHeaderPrefix.h"
 
+#include <bitset>
+
 namespace Ogre {
 
     /** \addtogroup Core
@@ -42,7 +44,6 @@ namespace Ogre {
     /** \addtogroup Effects
     *  @{
     */
-    const size_t RENDER_QUEUE_COUNT = RENDER_QUEUE_MAX+1;       
             
     /** An instance of a Compositor object for one Viewport. It is part of the CompositorChain
         for a Viewport.
@@ -107,7 +108,7 @@ namespace Ogre {
             /// Set state to SceneManager and RenderSystem
             virtual void execute(SceneManager *sm, RenderSystem *rs) = 0;
         };
-        typedef std::map<int, MaterialPtr> QuadMaterialMap;
+        typedef std::map<int, MaterialPtr> OGRE_DEPRECATED QuadMaterialMap;
         typedef std::pair<int, RenderSystemOperation*> RenderSystemOpPair;
         typedef std::vector<RenderSystemOpPair> RenderSystemOpPairs;
         /** Operation setup for a RenderTarget (collected).
@@ -118,12 +119,12 @@ namespace Ogre {
             TargetOperation()
             { 
             }
-            TargetOperation(RenderTarget *inTarget):
-                target(inTarget), currentQueueGroupID(0), visibilityMask(0xFFFFFFFF),
-                lodBias(1.0f),
-                onlyInitial(false), hasBeenRendered(false), findVisibleObjects(false), 
-                materialScheme(MaterialManager::DEFAULT_SCHEME_NAME), shadowsEnabled(true)
-            { 
+            TargetOperation(RenderTarget* inTarget)
+                : target(inTarget), currentQueueGroupID(0), visibilityMask(0xFFFFFFFF), lodBias(1.0f),
+                  onlyInitial(false), hasBeenRendered(false), findVisibleObjects(false),
+                  materialScheme(MaterialManager::DEFAULT_SCHEME_NAME), shadowsEnabled(true),
+                  alignCameraToFace(-1)
+            {
             }
             /// Target
             RenderTarget *target;
@@ -164,6 +165,9 @@ namespace Ogre {
             String materialScheme;
             /** Whether shadows will be enabled */
             bool shadowsEnabled;
+
+            String cameraOverride;
+            int alignCameraToFace;
         };
         typedef std::vector<TargetOperation> CompiledState;
         
@@ -217,7 +221,7 @@ namespace Ogre {
         @return
             The texture pointer, corresponds to a real texture.
         */
-        TexturePtr getTextureInstance(const String& name, size_t mrtIndex);
+        const TexturePtr& getTextureInstance(const String& name, size_t mrtIndex);
 
         /** Get the render target for a given render texture name. 
         @remarks
@@ -225,7 +229,7 @@ namespace Ogre {
             targets manually or any other modifications, the compositor instance 
             is in charge of this.
         */
-        RenderTarget* getRenderTarget(const String& name);
+        RenderTarget* getRenderTarget(const String& name, int slice = 0);
 
        
         /** Recursively collect target states (except for final Pass).
@@ -357,14 +361,19 @@ namespace Ogre {
         /** Create local rendertextures and other resources. Builds mLocalTextures.
         */
         void createResources(bool forResizeOnly);
+
+        void setupRenderTarget(RenderTarget* target, uint16 depthBufferId);
         
         /** Destroy local rendertextures and other resources.
         */
         void freeResources(bool forResizeOnly, bool clearReserveTextures);
 
+        CompositionTechnique::TextureDefinition*
+        resolveTexReference(const CompositionTechnique::TextureDefinition* texDef);
+
         /** Get RenderTarget for a named local texture.
         */
-        RenderTarget *getTargetForTex(const String &name);
+        RenderTarget *getTargetForTex(const String &name, int slice);
         
         /** Get source texture name for a named local texture.
         @param name
@@ -372,7 +381,7 @@ namespace Ogre {
         @param mrtIndex
             For MRTs, which attached surface to retrieve.
         */
-        const String &getSourceForTex(const String &name, size_t mrtIndex = 0);
+        const TexturePtr &getSourceForTex(const String &name, size_t mrtIndex = 0);
 
         /** Queue a render system operation.
         */
@@ -391,6 +400,7 @@ namespace Ogre {
         void notifyCameraChanged(Camera* camera);
 
         friend class CompositorChain;
+        friend class Compositor;
     };
     /** @} */
     /** @} */

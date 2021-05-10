@@ -39,6 +39,8 @@ THE SOFTWARE.
 #include "OgreD3D9DeviceManager.h"
 #include "OgreD3D9ResourceManager.h"
 
+#include <d3dx9.h>
+
 namespace Ogre 
 {
     /****************************************************************************************/
@@ -264,7 +266,7 @@ namespace Ogre
     {               
         D3D9_DEVICE_ACCESS_CRITICAL_SECTION
         
-        if (mIsManual)
+        if (isManuallyLoaded())
         {
             preLoadImpl();
 

@@ -29,10 +29,10 @@ THE SOFTWARE.
 #define __Compositor_H__
 
 #include "OgrePrerequisites.h"
-#include "OgreIteratorWrappers.h"
 #include "OgreHeaderPrefix.h"
 
 namespace Ogre {
+    template <typename T> class VectorIterator;
 
     /** \addtogroup Core
     *  @{
@@ -125,7 +125,7 @@ namespace Ogre {
         @param mrtIndex If name identifies a MRT, which texture attachment to retrieve
         @return The texture pointer, corresponds to a real texture
         */
-        TexturePtr getTextureInstance(const String& name, size_t mrtIndex);
+        const TexturePtr& getTextureInstance(const String& name, size_t mrtIndex);
 
         /** Get the render target for a given render texture name. 
         @remarks
@@ -133,7 +133,7 @@ namespace Ogre {
             targets manually or any other modifications, the compositor instance 
             is in charge of this.
         */
-        RenderTarget* getRenderTarget(const String& name);
+        RenderTarget* getRenderTarget(const String& name, int slice = 0);
 
     protected:
         /// @copydoc Resource::loadImpl

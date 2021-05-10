@@ -29,179 +29,27 @@ THE SOFTWARE.
 
 namespace Ogre {
 
-//-----------------------------------------------------------------------
-template<> 
-RTShader::FFPRenderStateBuilder* Singleton<RTShader::FFPRenderStateBuilder>::msSingleton = 0;
-
 namespace RTShader {
-
-
-//-----------------------------------------------------------------------
-FFPRenderStateBuilder* FFPRenderStateBuilder::getSingletonPtr()
-{
-    return msSingleton;
-}
-
-//-----------------------------------------------------------------------
-FFPRenderStateBuilder& FFPRenderStateBuilder::getSingleton()
-{
-    assert( msSingleton );  
-    return ( *msSingleton );
-}
-
-//-----------------------------------------------------------------------------
-FFPRenderStateBuilder::FFPRenderStateBuilder()
-{
-    
-
-}
-
-//-----------------------------------------------------------------------------
-FFPRenderStateBuilder::~FFPRenderStateBuilder()
-{
-    
-
-}
-
-//-----------------------------------------------------------------------------
-bool FFPRenderStateBuilder::initialize()
-{
-    SubRenderStateFactory* curFactory;
-
-    curFactory = OGRE_NEW FFPTransformFactory;  
-    ShaderGenerator::getSingleton().addSubRenderStateFactory(curFactory);
-    mFFPSubRenderStateFactoryList.push_back(curFactory);
-
-    curFactory = OGRE_NEW FFPColourFactory; 
-    ShaderGenerator::getSingleton().addSubRenderStateFactory(curFactory);
-    mFFPSubRenderStateFactoryList.push_back(curFactory);
-
-    curFactory = OGRE_NEW FFPLightingFactory;
-    ShaderGenerator::getSingleton().addSubRenderStateFactory(curFactory);
-    mFFPSubRenderStateFactoryList.push_back(curFactory);
-
-    curFactory = OGRE_NEW FFPTexturingFactory;
-    ShaderGenerator::getSingleton().addSubRenderStateFactory(curFactory);
-    mFFPSubRenderStateFactoryList.push_back(curFactory);
-
-    curFactory = OGRE_NEW FFPFogFactory;    
-    ShaderGenerator::getSingleton().addSubRenderStateFactory(curFactory);
-    mFFPSubRenderStateFactoryList.push_back(curFactory);
-
-	curFactory = OGRE_NEW FFPAlphaTestFactory;	
-	ShaderGenerator::getSingleton().addSubRenderStateFactory(curFactory);
-	mFFPSubRenderStateFactoryList.push_back(curFactory);
-	
-    return true;
-}
-
-//-----------------------------------------------------------------------------
-void FFPRenderStateBuilder::destroy()
-{
-    SubRenderStateFactoryIterator it;
-
-    for (it = mFFPSubRenderStateFactoryList.begin(); it != mFFPSubRenderStateFactoryList.end(); ++it)
-    {
-        ShaderGenerator::getSingleton().removeSubRenderStateFactory(*it);       
-        OGRE_DELETE *it;        
-    }
-    mFFPSubRenderStateFactoryList.clear();
-}
 
 
 //-----------------------------------------------------------------------------
 void FFPRenderStateBuilder::buildRenderState(ShaderGenerator::SGPass* sgPass, TargetRenderState* renderState)
 {
-    renderState->reset();
+    auto& sg = ShaderGenerator::getSingleton();
+    RenderState ffpTemplate;
+    ffpTemplate.addTemplateSubRenderState(sg.createSubRenderState(FFPTransform::Type));
+    ffpTemplate.addTemplateSubRenderState(sg.createSubRenderState(FFPColour::Type));
+#ifndef RTSHADER_SYSTEM_BUILD_EXT_SHADERS
+    ffpTemplate.addTemplateSubRenderState(sg.createSubRenderState(FFPLighting::Type));
+#else
+    ffpTemplate.addTemplateSubRenderState(sg.createSubRenderState(PerPixelLighting::Type));
+#endif
+    ffpTemplate.addTemplateSubRenderState(sg.createSubRenderState(FFPTexturing::Type));
+    ffpTemplate.addTemplateSubRenderState(sg.createSubRenderState(FFPFog::Type));
+    ffpTemplate.addTemplateSubRenderState(sg.createSubRenderState(FFPAlphaTest::Type));
 
-    // Build transformation sub state.
-    buildFFPSubRenderState(FFP_TRANSFORM, FFPTransform::Type, sgPass, renderState); 
-
-    // Build colour sub state.
-    buildFFPSubRenderState(FFP_COLOUR, FFPColour::Type, sgPass, renderState);
-
-    // Build lighting sub state.
-    buildFFPSubRenderState(FFP_LIGHTING, FFPLighting::Type, sgPass, renderState);
-
-    // Build texturing sub state.
-    buildFFPSubRenderState(FFP_TEXTURING, FFPTexturing::Type, sgPass, renderState); 
-    
-    // Build fog sub state.
-    buildFFPSubRenderState(FFP_FOG, FFPFog::Type, sgPass, renderState);
-
-    buildFFPSubRenderState(FFP_ALPHA_TEST, FFPAlphaTest::Type, sgPass, renderState);
-	
-    // Resolve colour stage flags.
-    resolveColourStageFlags(sgPass, renderState);
-
+    renderState->link(ffpTemplate, sgPass->getSrcPass(), sgPass->getDstPass());
 }
-
-
-//-----------------------------------------------------------------------------
-void FFPRenderStateBuilder::buildFFPSubRenderState(int subRenderStateOrder, const String& subRenderStateType,
-                                                ShaderGenerator::SGPass* sgPass, TargetRenderState* renderState)
-{
-    SubRenderState* subRenderState;
-
-    subRenderState = sgPass->getCustomFFPSubState(subRenderStateOrder);
-
-    if (subRenderState == NULL) 
-    {
-        subRenderState = ShaderGenerator::getSingleton().createSubRenderState(subRenderStateType);      
-    }
-
-    if (subRenderState->preAddToRenderState(renderState, sgPass->getSrcPass(), sgPass->getDstPass()))
-    {
-        renderState->addSubRenderStateInstance(subRenderState);
-    }
-    else
-    {       
-        ShaderGenerator::getSingleton().destroySubRenderState(subRenderState);              
-    }
-}
-
-
-//-----------------------------------------------------------------------------
-void FFPRenderStateBuilder::resolveColourStageFlags( ShaderGenerator::SGPass* sgPass, TargetRenderState* renderState )
-{
-    const SubRenderStateList& subRenderStateList = renderState->getTemplateSubRenderStateList();
-    FFPColour* colourSubState = NULL;
-
-    // Find the colour sub state.
-    for (SubRenderStateListConstIterator it=subRenderStateList.begin(); it != subRenderStateList.end(); ++it)
-    {
-        SubRenderState* curSubRenderState = *it;
-
-        if (curSubRenderState->getType() == FFPColour::Type)
-        {
-            colourSubState = static_cast<FFPColour*>(curSubRenderState);
-            break;
-        }
-    }
-    
-    for (SubRenderStateListConstIterator it=subRenderStateList.begin(); it != subRenderStateList.end(); ++it)
-    {
-        SubRenderState* curSubRenderState = *it;
-
-        // Add vertex shader specular lighting output in case of specular enabled.
-        if (curSubRenderState->getType() == FFPLighting::Type && colourSubState != NULL)
-        {
-            colourSubState->addResolveStageMask(FFPColour::SF_VS_OUTPUT_DIFFUSE);
-
-            Pass* srcPass = sgPass->getSrcPass();
-
-            if (srcPass->getShininess() > 0.0 &&
-                srcPass->getSpecular() != ColourValue::Black)
-            {
-                colourSubState->addResolveStageMask(FFPColour::SF_VS_OUTPUT_SPECULAR);              
-            }   
-            break;
-        }
-    }
-}
-
-
-
 }
 }
 

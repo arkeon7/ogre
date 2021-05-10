@@ -117,7 +117,8 @@ namespace Ogre
                 XRRFreeScreenConfigInfo(screenConfig);
             }
         }
-        else
+
+        if(mVideoModes.empty())
         {
             mCurrentMode.width = DisplayWidth(mXDisplay, DefaultScreen(mXDisplay));
             mCurrentMode.height = DisplayHeight(mXDisplay, DefaultScreen(mXDisplay));
@@ -581,28 +582,28 @@ namespace Ogre
         ::GLXContext glxContext = NULL;
 
         int profile;
-        int minVersion;
-        int maxVersion = 5;
+        int majorVersion;
+        int minorVersion = 0;
 
         switch(mContextProfile) {
         case CONTEXT_COMPATIBILITY:
             profile = GLX_CONTEXT_COMPATIBILITY_PROFILE_BIT_ARB;
-            minVersion = 1;
-            maxVersion = 3; // requesting 3.1 might return 3.2 core profile
+            majorVersion = 1;
             break;
         case CONTEXT_ES:
             profile = GLX_CONTEXT_ES2_PROFILE_BIT_EXT;
-            minVersion = 2;
+            majorVersion = 2;
             break;
         default:
             profile = GLX_CONTEXT_CORE_PROFILE_BIT_ARB;
-            minVersion = 3;
+            majorVersion = 3;
+            minorVersion = 3; // 3.1 would be sufficient per spec, but we need 3.3 anyway..
             break;
         }
 
         int context_attribs[] = {
-                GLX_CONTEXT_MAJOR_VERSION_ARB, maxVersion,
-                GLX_CONTEXT_MINOR_VERSION_ARB, 0,
+                GLX_CONTEXT_MAJOR_VERSION_ARB, majorVersion,
+                GLX_CONTEXT_MINOR_VERSION_ARB, minorVersion,
                 GLX_CONTEXT_PROFILE_MASK_ARB, profile,
                 None
         };
@@ -614,35 +615,21 @@ namespace Ogre
         PFNGLXCREATECONTEXTATTRIBSARBPROC _glXCreateContextAttribsARB;
         _glXCreateContextAttribsARB = (PFNGLXCREATECONTEXTATTRIBSARBPROC)getProcAddress("glXCreateContextAttribsARB");
 
-	OgreAssert(_glXCreateContextAttribsARB, "glXCreateContextAttribsARB() function not found");
-
-        while(!glxContext && (context_attribs[1] >= minVersion))
+        if(_glXCreateContextAttribsARB)
         {
-            ctxErrorOccurred = false;
-            glxContext = _glXCreateContextAttribsARB(mGLDisplay, fbConfig, shareList, direct, context_attribs);
-            // Sync to ensure any errors generated are processed.
-            XSync( mGLDisplay, False );
-            if ( !ctxErrorOccurred && glxContext )
+            // find maximal supported context version
+            context_attribs[1] = 4;
+            context_attribs[3] = 6;
+            while(!glxContext && (context_attribs[1] >= majorVersion && context_attribs[3] >= minorVersion))
             {
-                LogManager::getSingleton().logMessage("Created GL " + StringConverter::toString(context_attribs[1]) + "." + StringConverter::toString(context_attribs[3]) + " context" );
-            }
-            else
-            {
-                if(context_attribs[3] == 0)
-                {
-                    context_attribs[1] -= 1;
-                    context_attribs[3] = 6;
-                }
-                else
-                {
-                    context_attribs[3] -= 1;
-                }
+                ctxErrorOccurred = false;
+                glxContext = _glXCreateContextAttribsARB(mGLDisplay, fbConfig, shareList, direct, context_attribs);
+                context_attribs[1] -= context_attribs[3] == 0; // only decrement if minor == 0
+                context_attribs[3] = (context_attribs[3] - 1 + 7) % 7; // decrement: -1 -> 6
             }
         }
-
-        if (!glxContext) {
-            ctxErrorOccurred = false;
-
+        else
+        {
             // try old style context creation as a last resort
             // Needed at least by MESA 8.0.4 on Ubuntu 12.04.
             if (mContextProfile != CONTEXT_COMPATIBILITY) {
@@ -659,10 +646,9 @@ namespace Ogre
         // Restore the original error handler
         XSetErrorHandler( oldHandler );
 
-        if (ctxErrorOccurred || !glxContext) {
-          LogManager::getSingleton().logMessage(
-              "Failed to create an OpenGL context. " + ctxErrorMessage,
-              LML_CRITICAL);
+        if (ctxErrorOccurred || !glxContext)
+        {
+            LogManager::getSingleton().logError("Failed to create an OpenGL context - " + ctxErrorMessage);
         }
 
         return glxContext;

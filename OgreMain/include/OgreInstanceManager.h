@@ -50,7 +50,7 @@ namespace Ogre
         This class takes care of managing batches automatically, so that more are created when
         needed, and reuse existing ones as much as possible; thus the user doesn't have to worry
         of managing all those low level issues.
-        @see InstanceBatch & @see InstanceEntity for more information.
+        See @ref InstanceBatch and see @ref InstancedEntity for more information.
 
     @remarks
         Design discussion webpage: http://www.ogre3d.org/forums/viewtopic.php?f=4&t=59902
@@ -150,7 +150,7 @@ namespace Ogre
         /** Called when we you use a mesh which has shared vertices, the function creates separate
             vertex/index buffers and also recreates the bone assignments.
         */
-        void unshareVertices(const Ogre::MeshPtr &mesh);
+        static void unshareVertices(const Ogre::MeshPtr &mesh);
 
     public:
         InstanceManager( const String &customName, SceneManager *sceneManager,
@@ -220,7 +220,7 @@ namespace Ogre
         */
         size_t getMaxOrBestNumInstancesPerBatch( const String &materialName, size_t suggestedSize, uint16 flags );
 
-        /** @copydoc SceneManager::createInstancedEntity */
+        /// Creates an InstancedEntity
         InstancedEntity* createInstancedEntity( const String &materialName );
 
         /** This function can be useful to improve CPU speed after having too many instances
@@ -279,8 +279,7 @@ namespace Ogre
         /** Returns true if settings were already created for the given material name.
             If false is returned, it means getSetting will return default settings.
         */
-        bool hasSettings( const String &materialName ) const
-        { return mBatchSettings.find( materialName ) != mBatchSettings.end(); }
+        bool hasSettings( const String &materialName ) const;
 
         /** @copydoc InstanceBatch::setStaticAndUpdate */
         void setBatchesAsStaticAndUpdate( bool bStatic );
@@ -306,15 +305,7 @@ namespace Ogre
             setCustomParameter), but there's no synchronization mechanism when
             multithreading or creating more instances, that's up to the user.
         */
-        InstanceBatchIterator getInstanceBatchIterator( const String &materialName ) const
-        {
-            InstanceBatchMap::const_iterator it = mInstanceBatches.find( materialName );
-            if(it != mInstanceBatches.end())
-                return InstanceBatchIterator( it->second.begin(), it->second.end() );
-            else
-                OGRE_EXCEPT(Exception::ERR_INVALID_STATE, "Cannot create instance batch iterator. "
-                            "Material " + materialName + " cannot be found.", "InstanceManager::getInstanceBatchIterator");
-        }
+        InstanceBatchIterator getInstanceBatchIterator( const String &materialName ) const;
     };
 } // namespace Ogre
 

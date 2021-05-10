@@ -307,6 +307,8 @@ namespace Ogre {
     */
     void GLES2FBOManager::detectFBOFormats()
     {
+        GLES2RenderSystem* rs = getGLES2RenderSystem();
+        bool hasGLES3 = rs->hasMinGLVersion(3, 0);
 #if OGRE_PLATFORM == OGRE_PLATFORM_EMSCRIPTEN
         memset(mProps, 0, sizeof(mProps));
 
@@ -314,13 +316,16 @@ namespace Ogre {
         mProps[PF_A8B8G8R8].valid = true;
         FormatProperties::Mode mode = {1, 0};
         mProps[PF_A8B8G8R8].modes.push_back(mode);
+
+        if(hasGLES3)
+        {
+            mProps[PF_DEPTH16].valid = true;
+            mProps[PF_DEPTH16].modes.push_back(mode);
+        }
         LogManager::getSingleton().logMessage("[GLES2] : detectFBOFormats is disabled on this platform (due performance reasons)");
 #else
         // Try all formats, and report which ones work as target
-        GLES2RenderSystem* rs = getGLES2RenderSystem();
         GLuint fb = 0, tid = 0;
-
-        bool hasGLES3 = rs->hasMinGLVersion(3, 0);
 
         const size_t depthCount = hasGLES3 ? DEPTHFORMAT_COUNT : DEPTHFORMAT_COUNT - 1; // 32_8 is not available on GLES2
         const uchar stencilStep = hasGLES3 ? 3 : 1; // 1 and 4 bit not available on GLES3
@@ -496,30 +501,21 @@ namespace Ogre {
         GLES2FBORenderTexture *retval = new GLES2FBORenderTexture(this, name, target, writeGamma, fsaa);
         return retval;
     }
-    MultiRenderTarget *GLES2FBOManager::createMultiRenderTarget(const String & name)
-    {
-        return new GLES2FBOMultiRenderTarget(this, name);
-    }
 
     void GLES2FBOManager::bind(RenderTarget *target)
     {
-        // Check if the render target is in the rendertarget->FBO map
         if(auto fbo = dynamic_cast<GLRenderTarget*>(target)->getFBO())
             fbo->bind(true);
-            // Old style context (window/pbuffer) or copying render texture
-#if OGRE_PLATFORM == OGRE_PLATFORM_APPLE_IOS
         else
         {
             // Non-multisampled screen buffer is FBO #1 on iOS, multisampled is yet another,
             // so give the target ability to influence decision which FBO to use
-            GLuint glfbo = 0;
-            target->getCustomAttribute("GLFBO", &glfbo);
-            OGRE_CHECK_GL_ERROR(glBindFramebuffer(GL_FRAMEBUFFER, glfbo));
-        }
-#else
-        else
-            OGRE_CHECK_GL_ERROR(glBindFramebuffer(GL_FRAMEBUFFER, 0));
+            GLuint mainfbo = 0;
+#if OGRE_PLATFORM == OGRE_PLATFORM_APPLE_IOS
+            target->getCustomAttribute("GLFBO", &mainfbo);
 #endif
+            OGRE_CHECK_GL_ERROR(glBindFramebuffer(GL_FRAMEBUFFER, mainfbo));
+        }
     }
     
     GLSurfaceDesc GLES2FBOManager::requestRenderBuffer(GLenum format, uint32 width, uint32 height, uint fsaa)

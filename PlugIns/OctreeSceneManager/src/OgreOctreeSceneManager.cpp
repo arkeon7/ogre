@@ -352,7 +352,7 @@ Camera * OctreeSceneManager::createCamera( const String &name )
     }
 
     Camera * c = OGRE_NEW OctreeCamera( name, this );
-    mCameras.insert( CameraList::value_type( name, c ) );
+    mCameras.emplace(name, c);
 
     // create visible bounds aab map entry
     mCamVisibleObjectsMap[c] = VisibleObjectsBoundsInfo();
@@ -629,12 +629,8 @@ void OctreeSceneManager::walkOctree( OctreeCamera *camera, RenderQueue *queue,
 
                 mVisible.push_back( sn );
 
-                if ( mDisplayNodes )
-                    queue -> addRenderable( sn->getDebugRenderable() );
-
-                // check if the scene manager or this node wants the bounding box shown.
-                if (sn->getShowBoundingBox() || mShowBoundingBoxes)
-                    sn->_addBoundingBoxToQueue(queue);
+                if (mDebugDrawer)
+                    mDebugDrawer->drawSceneNode(sn);
             }
 
             ++it;

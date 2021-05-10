@@ -30,26 +30,16 @@ THE SOFTWARE.
 #ifndef __EGLWindow_H__
 #define __EGLWindow_H__
 
-#include "OgreRenderWindow.h"
+#include "OgreGLWindow.h"
 #include "OgreEGLSupport.h"
 #include "OgreEGLContext.h"
-#include "OgreGLRenderTarget.h"
 
 namespace Ogre {
-    class _OgrePrivate EGLWindow : public RenderWindow, public GLRenderTarget
+    class _OgrePrivate EGLWindow : public GLWindow
     {
     private:
         protected:
-            bool mClosed;
-            bool mVisible;
-            bool mIsTopLevel;
-            bool mIsExternal;
-            bool mIsExternalGLControl;
-            bool mVSync;
-            unsigned int mVSyncInterval;
-
             EGLSupport* mGLSupport;
-            EGLContext* mContext;
             NativeWindowType mWindow;
             NativeDisplayType mNativeDisplay;
             ::EGLDisplay mEglDisplay;
@@ -60,50 +50,29 @@ namespace Ogre {
 
             ::EGLSurface createSurfaceFromWindow(::EGLDisplay display, NativeWindowType win);
 
-            virtual void switchFullScreen(bool fullscreen) = 0;
-            EGLContext * createEGLContext() const {
-                return new EGLContext(mEglDisplay, mGLSupport, mEglConfig, mEglSurface);
+            virtual void switchFullScreen(bool fullscreen) {}
+            EGLContext * createEGLContext(::EGLContext external = NULL) const {
+                return new EGLContext(mEglDisplay, mGLSupport, mEglConfig, mEglSurface, external);
             }
 
-            virtual void getLeftAndTopFromNativeWindow(int & left, int & top, uint width, uint height) = 0;
-            virtual void initNativeCreatedWindow(const NameValuePairList *miscParams) = 0;
-            virtual void createNativeWindow( int &left, int &top, uint &width, uint &height, String &title ) = 0;
-            virtual void reposition(int left, int top) = 0;
-            virtual void resize(unsigned int width, unsigned int height) = 0;
-            virtual void windowMovedOrResized() = 0;
+            virtual void windowMovedOrResized() {}
 
-            GLContext* getContext() const { return mContext; }
+            void finaliseWindow();
     public:
             EGLWindow(EGLSupport* glsupport);
             virtual ~EGLWindow();
 
-//      Moved create to native source because it has native calls in it.
-//            void create(const String& name, unsigned int width, unsigned int height,
-//                        bool fullScreen, const NameValuePairList *miscParams);
+            // default, PBuffer based, implementation
+            void create(const String& name, unsigned int width, unsigned int height, bool fullScreen,
+                        const NameValuePairList* miscParams);
+
+            void reposition(int left, int top) {}
+            void resize(unsigned int width, unsigned int height) {}
 
             virtual void setFullscreen (bool fullscreen, uint width, uint height);
             void destroy(void);
-            bool isClosed(void) const;
-            bool isVisible(void) const;
-            void setVisible(bool visible);
             void swapBuffers();
-            void copyContentsToMemory(const Box& src, const PixelBox &dst, FrameBuffer buffer);
-
-            /** @copydoc see RenderWindow::setVSyncEnabled */
             void setVSyncEnabled(bool vsync);
-
-            /** @copydoc see RenderWindow::isVSyncEnabled */
-            bool isVSyncEnabled() const {
-                return mVSync;
-            }
-
-            /** @copydoc see RenderWindow::setVSyncInterval */
-            void setVSyncInterval(unsigned int interval);
-
-            /** @copydoc see RenderWindow::getVSyncInterval */
-            unsigned int getVSyncInterval() const {
-                return mVSyncInterval;
-            }
 
             /**
                @remarks
@@ -114,8 +83,6 @@ namespace Ogre {
                * DISPLAYNAME    The name for the connected display.
                */
             virtual void getCustomAttribute(const String& name, void* pData);
-
-            bool requiresTextureFlipping() const;
 
             PixelFormat suggestPixelFormat() const;
 #ifdef RPI

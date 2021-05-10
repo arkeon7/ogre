@@ -35,7 +35,7 @@ THE SOFTWARE.
 #include "OgreCommon.h"
 #include "OgreHeaderPrefix.h"
 #include "OgreMath.h"
-#include "OgreVector3.h"
+#include "OgreVector.h"
 
 namespace Ogre {
     /** \addtogroup Core
@@ -69,21 +69,20 @@ namespace Ogre {
     {
         friend class BillboardSet;
         friend class BillboardParticleRenderer;
-    protected:
+    private:
         bool mOwnDimensions;
         bool mUseTexcoordRect;
         uint16 mTexcoordIndex;      /// Index into the BillboardSet array of texture coordinates
         FloatRect mTexcoordRect;    /// Individual texture coordinates
-        Real mWidth;
-        Real mHeight;
+        float mWidth;
+        float mHeight;
     public:
         // Note the intentional public access to main internal variables used at runtime
         // Forcing access via get/set would be too costly for 000's of billboards
         Vector3 mPosition;
         /// Normalised direction vector
         Vector3 mDirection;
-        BillboardSet* mParentSet;
-        ColourValue mColour;
+        RGBA mColour;
         Radian mRotation;
 
         /** Default constructor.
@@ -108,28 +107,24 @@ namespace Ogre {
             @remarks
                 This rotation is relative to the center of the billboard.
         */
-        void setRotation(const Radian& rotation);
+        void setRotation(const Radian& rotation) { mRotation = rotation; }
 
         /** Set the position of the billboard.
             @remarks
                 This position is relative to a point on the quad which is the billboard. Depending on the BillboardSet,
                 this may be the center of the quad, the top-left etc. See BillboardSet::setBillboardOrigin for more info.
         */
-        void setPosition(const Vector3& position);
+        void setPosition(const Vector3& position) { mPosition = position; }
 
-        /** Set the position of the billboard.
-            @remarks
-                This position is relative to a point on the quad which is the billboard. Depending on the BillboardSet,
-                this may be the center of the quad, the top-left etc. See BillboardSet::setBillboardOrigin for more info.
-        */
-        void setPosition(Real x, Real y, Real z);
+        /// @overload
+        void setPosition(Real x, Real y, Real z) { setPosition({x, y, z}); }
 
         /** Get the position of the billboard.
             @remarks
                 This position is relative to a point on the quad which is the billboard. Depending on the BillboardSet,
                 this may be the center of the quad, the top-left etc. See BillboardSet::setBillboardOrigin for more info.
         */
-        const Vector3& getPosition(void) const;
+        const Vector3& getPosition(void) const { return mPosition; }
 
         /** Sets the width and height for this billboard.
             @remarks
@@ -138,7 +133,7 @@ namespace Ogre {
                 this method unless you really need to have different billboard dimensions within the same set. Otherwise
                 just call the BillboardSet::setDefaultDimensions method instead.
         */
-        void setDimensions(Real width, Real height);
+        void setDimensions(float width, float height);
 
         /** Resets this Billboard to use the parent BillboardSet's dimensions instead of it's own. */
         void resetDimensions(void) { mOwnDimensions = false; }
@@ -148,28 +143,24 @@ namespace Ogre {
                 base colour of the material allowing more varied billboards. The default colour is white.
                 The tinting is effected using vertex colours.
         */
-        void setColour(const ColourValue& colour);
+        void setColour(const ColourValue& colour) { mColour = colour.getAsBYTE(); }
 
         /** Gets the colour of this billboard.
         */
-        const ColourValue& getColour(void) const;
+        ColourValue getColour(void) const { return ColourValue((const uchar*)&mColour); }
 
         /** Returns true if this billboard deviates from the BillboardSet's default dimensions (i.e. if the
             Billboard::setDimensions method has been called for this instance).
             @see
                 Billboard::setDimensions
         */
-        bool hasOwnDimensions(void) const;
+        bool hasOwnDimensions(void) const { return mOwnDimensions; }
 
         /** Retrieves the billboard's personal width, if hasOwnDimensions is true. */
-        Real getOwnWidth(void) const;
+        float getOwnWidth(void) const { return mWidth; }
 
         /** Retrieves the billboard's personal height, if hasOwnDimensions is true. */
-        Real getOwnHeight(void) const;
-
-        /** Internal method for notifying the billboard of it's owner.
-        */
-        void _notifyOwner(BillboardSet* owner);
+        float getOwnHeight(void) const { return mHeight; }
 
         /** Returns true if this billboard use individual texture coordinate rect (i.e. if the 
             Billboard::setTexcoordRect method has been called for this instance), or returns
@@ -198,19 +189,15 @@ namespace Ogre {
           */
         uint16 getTexcoordIndex(void) const { return mTexcoordIndex; }
 
-        /** setTexcoordRect() sets the individual texture coordinate rect of this billboard
-            will use when rendering. The parent billboard set may contain more than one, in
+        /** sets the individual texture coordinate rect of this billboard will use when rendering.
+            The parent billboard set may contain more than one, in
             which case a billboard can be textured with different pieces of a larger texture
             sheet very efficiently.
         */
         void setTexcoordRect(const FloatRect& texcoordRect);
 
-        /** setTexcoordRect() sets the individual texture coordinate rect of this billboard
-            will use when rendering. The parent billboard set may contain more than one, in
-            which case a billboard can be textured with different pieces of a larger texture
-            sheet very efficiently.
-        */
-        void setTexcoordRect(Real u0, Real v0, Real u1, Real v1);
+        /// @overload
+        void setTexcoordRect(float u0, float v0, float u1, float v1) { setTexcoordRect({u0, v0, u1, v1}); }
 
         /** getTexcoordRect() returns the previous value set by setTexcoordRect(). 
             @remarks

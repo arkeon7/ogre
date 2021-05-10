@@ -65,6 +65,9 @@ namespace Ogre {
     MaterialManager::~MaterialManager()
     {
         mDefaultSettings.reset();
+
+        Pass::processPendingPassUpdates(); // make sure pass graveyard is cleaned
+
         // Resources cleared by superclass
         // Unregister with resource group manager
         ResourceGroupManager::getSingleton()._unregisterResourceManager(mResourceType);
@@ -85,7 +88,7 @@ namespace Ogre {
         return static_pointer_cast<Material>(createResource(name,group,isManual,loader,createParams));
     }
     //-----------------------------------------------------------------------
-    MaterialPtr MaterialManager::getByName(const String& name, const String& groupName)
+    MaterialPtr MaterialManager::getByName(const String& name, const String& groupName) const
     {
         return static_pointer_cast<Material>(getResourceByName(name, groupName));
     }
@@ -186,16 +189,6 @@ namespace Ogre {
                 return i->first;
         }
         return DEFAULT_SCHEME_NAME;
-    }
-    //-----------------------------------------------------------------------
-    unsigned short MaterialManager::_getActiveSchemeIndex(void) const
-    {
-        return mActiveSchemeIndex;
-    }
-    //-----------------------------------------------------------------------
-    const String& MaterialManager::getActiveScheme(void) const
-    {
-        return mActiveSchemeName;
     }
     //-----------------------------------------------------------------------
     void MaterialManager::setActiveScheme(const String& schemeName)

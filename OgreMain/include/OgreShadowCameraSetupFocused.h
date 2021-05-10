@@ -35,6 +35,7 @@ THE SOFTWARE.
 #include "OgreConvexBody.h"
 #include "OgreHeaderPrefix.h"
 #include "OgreAxisAlignedBox.h"
+#include "OgreSceneNode.h"
 
 namespace Ogre {
 
@@ -73,6 +74,7 @@ namespace Ogre {
 
         /** Temporary preallocated camera to set up a light frustum for clipping in FocusedShadowCameraSetup::calculateB.
         */
+        SceneNode mLightFrustumCameraNode;
         std::unique_ptr<Camera> mLightFrustumCamera;
         mutable bool mLightFrustumCameraCalculated;
 
@@ -282,7 +284,7 @@ namespace Ogre {
             incorrectly. By default the more aggressive approach is used since it
             leads to significantly better results in most cases, but if you experience
             clipping issues, you can use the less aggressive version.
-        @param aggressive
+        @param useAggressiveRegion
             True to use the more aggressive approach, false otherwise.
          */
         static ShadowCameraSetupPtr create(bool useAggressiveRegion = true)

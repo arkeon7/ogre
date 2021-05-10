@@ -33,7 +33,7 @@ THE SOFTWARE.
 
 #include "OgreMovableObject.h"
 #include "OgreQuaternion.h"
-#include "OgreVector3.h"
+#include "OgreVector.h"
 #include "OgreHardwareBufferManager.h"
 #include "OgreRenderable.h"
 #include "OgreResourceGroupManager.h"
@@ -47,12 +47,12 @@ namespace Ogre {
     *  @{
     */
     /** Defines an instance of a discrete, movable object based on a Mesh.
-    @remarks
-        Ogre generally divides renderable objects into 2 groups, discrete
+
+        %Ogre generally divides renderable objects into 2 groups, discrete
         (separate) and relatively small objects which move around the world,
         and large, sprawling geometry which makes up generally immovable
         scenery, aka 'level geometry'.
-    @par
+
         The Mesh and SubMesh classes deal with the definition of the geometry
         used by discrete movable objects. Entities are actual instances of
         objects based on this geometry in the world. Therefore there is
@@ -66,14 +66,13 @@ namespace Ogre {
         individual changes is kept in the SubEntity class. There is a 1:1
         relationship between SubEntity instances and the SubMesh instances
         associated with the Mesh the Entity is based on.
-    @par
+
         Entity and SubEntity classes are never created directly. Use the
         createEntity method of the SceneManager (passing a model name) to
         create one.
-    @par
+
         Entities are included in the scene by associating them with a
-        SceneNode, using the attachEntity method. See the SceneNode class
-        for full information.
+        SceneNode, using the @ref SceneNode::attachObject method.
     @note
         No functions were declared virtual to improve performance.
     */
@@ -85,9 +84,9 @@ namespace Ogre {
     public:
         
         typedef std::set<Entity*> EntitySet;
-        typedef std::map<unsigned short, bool> SchemeHardwareAnimMap;
+        typedef std::vector<std::pair<unsigned short, bool>> SchemeHardwareAnimMap;
         typedef std::vector<SubEntity*> SubEntityList;
-    protected:
+    private:
 
         /** Private constructor (instances cannot be created directly).
         */
@@ -309,8 +308,8 @@ namespace Ogre {
 
     public:
         /// Contains the child objects (attached to bones) indexed by name.
-        typedef std::map<String, MovableObject*> ChildObjectList;
-    protected:
+        typedef std::vector<MovableObject*> ChildObjectList;
+    private:
         ChildObjectList mChildObjectList;
 
 
@@ -320,9 +319,8 @@ namespace Ogre {
         ShadowRenderableList mShadowRenderables;
 
         /** Nested class to allow entity shadows. */
-        class _OgreExport EntityShadowRenderable : public ShadowRenderable
+        class EntityShadowRenderable : public ShadowRenderable
         {
-        protected:
             Entity* mParent;
             /// Shared link to position buffer.
             HardwareVertexBufferSharedPtr mPositionBuffer;
@@ -343,16 +341,13 @@ namespace Ogre {
             
             /// Create the separate light cap if it doesn't already exists.
             void _createSeparateLightCap();
-            /// @copydoc ShadowRenderable::getWorldTransforms.
-            void getWorldTransforms(Matrix4* xform) const;
+            void getWorldTransforms(Matrix4* xform) const override;
             HardwareVertexBufferSharedPtr getPositionBuffer(void) { return mPositionBuffer; }
             HardwareVertexBufferSharedPtr getWBuffer(void) { return mWBuffer; }
             /// Rebind the source positions (for temp buffer users).
             void rebindPositionBuffer(const VertexData* vertexData, bool force);
-            /// @copydoc ShadowRenderable::isVisible.
-            bool isVisible(void) const;
-            /// @copydoc ShadowRenderable::rebindIndexBuffer.
-            virtual void rebindIndexBuffer(const HardwareIndexBufferSharedPtr& indexBuffer);
+            bool isVisible(void) const override;
+            virtual void rebindIndexBuffer(const HardwareIndexBufferSharedPtr& indexBuffer) override;
         };
     public:
         /** Default destructor.
@@ -417,34 +412,22 @@ namespace Ogre {
         */
         void setMaterial(const MaterialPtr& material);
 
-        /** @copydoc MovableObject::_releaseManualHardwareResources */
-        void _releaseManualHardwareResources();
-        /** @copydoc MovableObject::_restoreManualHardwareResources */
-        void _restoreManualHardwareResources();
+        void _releaseManualHardwareResources() override;
+        void _restoreManualHardwareResources() override;
 
-        /** @copydoc MovableObject::_notifyCurrentCamera
-        */
-        void _notifyCurrentCamera(Camera* cam);
+        void _notifyCurrentCamera(Camera* cam) override;
 
-        /// @copydoc MovableObject::setRenderQueueGroup
-        void setRenderQueueGroup(uint8 queueID);
+        void setRenderQueueGroup(uint8 queueID) override;
 
-        /// @copydoc MovableObject::setRenderQueueGroupAndPriority
-        void setRenderQueueGroupAndPriority(uint8 queueID, ushort priority);
+        void setRenderQueueGroupAndPriority(uint8 queueID, ushort priority) override;
 
-        /** @copydoc MovableObject::getBoundingBox
-        */
-        const AxisAlignedBox& getBoundingBox(void) const;
+        const AxisAlignedBox& getBoundingBox(void) const override;
 
         /// Merge all the child object Bounds a return it.
         AxisAlignedBox getChildObjectsBoundingBox(void) const;
 
-        /** @copydoc MovableObject::_updateRenderQueue
-        */
-        void _updateRenderQueue(RenderQueue* queue);
-
-        /** @copydoc MovableObject::getMovableType */
-        const String& getMovableType(void) const;
+        void _updateRenderQueue(RenderQueue* queue) override;
+        const String& getMovableType(void) const override;
 
         /** For entities based on animated meshes, gets the AnimationState object for a single animation.
         @remarks
@@ -601,26 +584,21 @@ namespace Ogre {
         /// Detach all MovableObjects previously attached using attachObjectToBone
         void detachAllObjectsFromBone(void);
 
-        typedef MapIterator<ChildObjectList> ChildObjectListIterator;
+        typedef VectorIterator<ChildObjectList> ChildObjectListIterator;
+        /// @deprecated use getAttachedObjects()
+        OGRE_DEPRECATED ChildObjectListIterator getAttachedObjectIterator(void);
         /** Gets an iterator to the list of objects attached to bones on this entity. */
-        ChildObjectListIterator getAttachedObjectIterator(void);
-        /** @copydoc MovableObject::getBoundingRadius */
-        Real getBoundingRadius(void) const;
+        const ChildObjectList& getAttachedObjects() const { return mChildObjectList; }
 
-        /** @copydoc MovableObject::getWorldBoundingBox */
-        const AxisAlignedBox& getWorldBoundingBox(bool derive = false) const;
-        /** @copydoc MovableObject::getWorldBoundingSphere */
-        const Sphere& getWorldBoundingSphere(bool derive = false) const;
+        Real getBoundingRadius(void) const override;
+        const AxisAlignedBox& getWorldBoundingBox(bool derive = false) const override;
+        const Sphere& getWorldBoundingSphere(bool derive = false) const override;
 
-        /** @copydoc ShadowCaster::getEdgeList */
-        EdgeData* getEdgeList(void);
-        /** @copydoc ShadowCaster::hasEdgeList */
-        bool hasEdgeList(void);
-        /** @copydoc ShadowCaster::getShadowVolumeRenderableIterator */
-        ShadowRenderableListIterator getShadowVolumeRenderableIterator(
+        EdgeData* getEdgeList(void) override;
+        const ShadowRenderableList& getShadowVolumeRenderableList(
             ShadowTechnique shadowTechnique, const Light* light,
             HardwareIndexBufferSharedPtr* indexBuffer, size_t* indexBufferUsedSize,
-            bool extrudeVertices, Real extrusionDistance, unsigned long flags = 0);
+            bool extrudeVertices, Real extrusionDistance, unsigned long flags = 0) override;
 
         /** Internal method for retrieving bone matrix information. */
         const Affine3* _getBoneMatrices(void) const { return mBoneMatrices;}
@@ -647,8 +625,7 @@ namespace Ogre {
         */
         bool isHardwareAnimationEnabled(void);
 
-        /** @copydoc MovableObject::_notifyAttached */
-        void _notifyAttached(Node* parent, bool isTagPoint = false);
+        void _notifyAttached(Node* parent, bool isTagPoint = false) override;
         /** Returns the number of requests that have been made for software animation
         @remarks
             If non-zero then software animation will be performed in updateAnimation
@@ -836,9 +813,7 @@ namespace Ogre {
         */
         void loadingComplete(Resource* res);
 
-        /// @copydoc MovableObject::visitRenderables
-        void visitRenderables(Renderable::Visitor* visitor, 
-            bool debugRenderables = false);
+        void visitRenderables(Renderable::Visitor* visitor, bool debugRenderables = false) override;
 
         /** Get the LOD strategy transformation of the mesh LOD factor. */
         Real _getMeshLodFactorTransformed() const;
@@ -897,7 +872,7 @@ namespace Ogre {
     /** Factory object for creating Entity instances */
     class _OgreExport EntityFactory : public MovableObjectFactory
     {
-    protected:
+    private:
         MovableObject* createInstanceImpl( const String& name, const NameValuePairList* params);
     public:
         EntityFactory() {}
@@ -906,8 +881,6 @@ namespace Ogre {
         static String FACTORY_TYPE_NAME;
 
         const String& getType(void) const;
-        void destroyInstance( MovableObject* obj);
-
     };
     /** @} */
     /** @} */

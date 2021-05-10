@@ -144,17 +144,6 @@ void HardwareSkinning::copyFrom(const SubRenderState& rhs)
 }
 
 //-----------------------------------------------------------------------
-void operator<<(std::ostream& o, const HardwareSkinning::SkinningData& data)
-{
-    o << data.isValid;
-    o << data.maxBoneCount;
-    o << data.maxWeightCount;
-    o << data.skinningType;
-    o << data.correctAntipodalityHandling;
-    o << data.scalingShearingSupport;
-}
-
-//-----------------------------------------------------------------------
 bool HardwareSkinning::preAddToRenderState(const RenderState* renderState, Pass* srcPass, Pass* dstPass)
 {
     bool isValid = true;
@@ -186,15 +175,24 @@ bool HardwareSkinning::preAddToRenderState(const RenderState* renderState, Pass*
         (weightCount != 0) && (weightCount <= 4) &&
         ((mCreator == NULL) || (boneCount <= mCreator->getMaxCalculableBoneCount()));
 
+    // This requires GLES3.0
+    if (ShaderGenerator::getSingleton().getTargetLanguage() == "glsles" &&
+        !GpuProgramManager::getSingleton().isSyntaxSupported("glsl300es"))
+        doBoneCalculations = false;
+
     mActiveTechnique->setDoBoneCalculations(doBoneCalculations);
+    mActiveTechnique->setDoLightCalculations(srcPass->getLightingEnabled());
 
     if ((doBoneCalculations) && (mCreator))
     {
         //update the receiver and caster materials
         if (!dstPass->getParent()->getShadowCasterMaterial())
         {
-            dstPass->getParent()->setShadowCasterMaterial(
-                mCreator->getCustomShadowCasterMaterial(mSkinningType, weightCount - 1));
+            auto casterMat = mCreator->getCustomShadowCasterMaterial(mSkinningType, weightCount - 1);
+
+            // if the caster material itsefl uses RTSS hardware skinning
+            if(casterMat.get() != dstPass->getParent()->getParent())
+                dstPass->getParent()->setShadowCasterMaterial(casterMat);
         }
 
         if (!dstPass->getParent()->getShadowReceiverMaterial())
@@ -288,10 +286,12 @@ SubRenderState* HardwareSkinningFactory::createInstance(ScriptCompiler* compiler
                 skinType = ST_LINEAR;
             }
         }
+        else
+            hasError = true;
 
         if (hasError == true)
         {
-            compiler->addError(ScriptCompiler::CE_INVALIDPARAMETERS, prop->file, prop->line, "Expected the format: hardware_skinning <bone count> <weight count> [skinning type] [correct antipodality handling] [scaling/shearing support]");
+            compiler->addError(ScriptCompiler::CE_INVALIDPARAMETERS, prop->file, prop->line);
             return NULL;
         }
         else
@@ -411,6 +411,11 @@ const MaterialPtr& HardwareSkinningFactory::getCustomShadowReceiverMaterial(cons
 void HardwareSkinningFactory::prepareEntityForSkinning(const Entity* pEntity, SkinningType skinningType, 
                                bool correctAntidpodalityHandling, bool shearScale)
 {
+    // This requires GLES3.0
+    if (ShaderGenerator::getSingleton().getTargetLanguage() == "glsles" &&
+        !GpuProgramManager::getSingleton().isSyntaxSupported("glsl300es"))
+        return;
+
     if (pEntity != NULL) 
     {
         size_t lodLevels = pEntity->getNumManualLodLevels() + 1;
@@ -523,7 +528,7 @@ bool HardwareSkinningFactory::imprintSkeletonData(const MaterialPtr& pMaterial, 
 
             //update the data in the material and invalidate it in the RTShader system
             //do it will be regenerated
-            binding.setUserAny(HS_DATA_BIND_NAME, Any(data));
+            binding.setUserAny(HS_DATA_BIND_NAME, data);
 
             size_t schemeCount = ShaderGenerator::getSingleton().getRTShaderSchemeCount();
             for(size_t i = 0 ; i < schemeCount ; ++i)
@@ -531,9 +536,7 @@ bool HardwareSkinningFactory::imprintSkeletonData(const MaterialPtr& pMaterial, 
                 //invalidate the material so it will be recreated with the correct
                 //amount of bones and weights
                 const String& schemeName = ShaderGenerator::getSingleton().getRTShaderScheme(i);
-                ShaderGenerator::getSingleton().invalidateMaterial(
-                    schemeName, pMaterial->getName(), pMaterial->getGroup());
-
+                ShaderGenerator::getSingleton().invalidateMaterial(schemeName, *pMaterial);
             }
 
         }

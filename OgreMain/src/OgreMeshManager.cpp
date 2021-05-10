@@ -32,6 +32,19 @@ THE SOFTWARE.
 
 namespace Ogre
 {
+    struct MeshCodec : public Codec
+    {
+        String magicNumberToFileExt(const char* magicNumberPtr, size_t maxbytes) const { return ""; }
+        String getType() const { return "mesh"; }
+        void decode(const DataStreamPtr& input, const Any& output) const override
+        {
+            Mesh* dst = any_cast<Mesh*>(output);
+            MeshSerializer serializer;
+            serializer.setListener(MeshManager::getSingleton().getListener());
+            serializer.importMesh(input, dst);
+        }
+    };
+
     //-----------------------------------------------------------------------
     template<> MeshManager* Singleton<MeshManager>::msSingleton = 0;
     MeshManager* MeshManager::getSingletonPtr(void)
@@ -52,16 +65,20 @@ namespace Ogre
         mLoadOrder = 350.0f;
         mResourceType = "Mesh";
 
+        mMeshCodec.reset(new MeshCodec());
+        Codec::registerCodec(mMeshCodec.get());
+
         ResourceGroupManager::getSingleton()._registerResourceManager(mResourceType, this);
 
     }
     //-----------------------------------------------------------------------
     MeshManager::~MeshManager()
     {
+        Codec::unregisterCodec(mMeshCodec.get());
         ResourceGroupManager::getSingleton()._unregisterResourceManager(mResourceType);
     }
     //-----------------------------------------------------------------------
-    MeshPtr MeshManager::getByName(const String& name, const String& groupName)
+    MeshPtr MeshManager::getByName(const String& name, const String& groupName) const
     {
         return static_pointer_cast<Mesh>(getResourceByName(name, groupName));
     }
@@ -69,9 +86,10 @@ namespace Ogre
     void MeshManager::_initialise(void)
     {
         // Create prefab objects
-        createPrefabPlane();
-        createPrefabCube();
-        createPrefabSphere();
+        createManual("Prefab_Sphere", RGN_INTERNAL, &mPrefabLoader);
+        createManual("Prefab_Cube", RGN_INTERNAL, &mPrefabLoader);
+        // Planes can never be manifold
+        createManual("Prefab_Plane", RGN_INTERNAL, &mPrefabLoader)->setAutoBuildEdgeLists(false);
     }
     //-----------------------------------------------------------------------
     MeshManager::ResourceCreateOrRetrieveResult MeshManager::createOrRetrieve(
@@ -140,11 +158,11 @@ namespace Ogre
         bool vertexShadowBuffer, bool indexShadowBuffer)
     {
         // Create manual mesh which calls back self to load
-        MeshPtr pMesh = createManual(name, groupName, this);
+        MeshPtr pMesh = createManual(name, groupName, &mPrefabLoader);
         // Planes can never be manifold
         pMesh->setAutoBuildEdgeLists(false);
         // store parameters
-        MeshBuildParams params;
+        MeshBuildParams params = {};
         params.type = MBT_PLANE;
         params.plane = plane;
         params.width = width;
@@ -160,7 +178,7 @@ namespace Ogre
         params.indexBufferUsage = indexBufferUsage;
         params.vertexShadowBuffer = vertexShadowBuffer;
         params.indexShadowBuffer = indexShadowBuffer;
-        mMeshBuildParams[pMesh.get()] = params;
+        mPrefabLoader.mMeshBuildParams[pMesh.get()] = params;
 
         // to preserve previous behaviour, load immediately
         pMesh->load();
@@ -176,11 +194,11 @@ namespace Ogre
             bool vertexShadowBuffer, bool indexShadowBuffer)
     {
         // Create manual mesh which calls back self to load
-        MeshPtr pMesh = createManual(name, groupName, this);
+        MeshPtr pMesh = createManual(name, groupName, &mPrefabLoader);
         // Planes can never be manifold
         pMesh->setAutoBuildEdgeLists(false);
         // store parameters
-        MeshBuildParams params;
+        MeshBuildParams params = {};
         params.type = MBT_CURVED_PLANE;
         params.plane = plane;
         params.width = width;
@@ -197,7 +215,7 @@ namespace Ogre
         params.indexBufferUsage = indexBufferUsage;
         params.vertexShadowBuffer = vertexShadowBuffer;
         params.indexShadowBuffer = indexShadowBuffer;
-        mMeshBuildParams[pMesh.get()] = params;
+        mPrefabLoader.mMeshBuildParams[pMesh.get()] = params;
 
         // to preserve previous behaviour, load immediately
         pMesh->load();
@@ -219,7 +237,7 @@ namespace Ogre
         int ySegmentsToKeep)
     {
         // Create manual mesh which calls back self to load
-        MeshPtr pMesh = createManual(name, groupName, this);
+        MeshPtr pMesh = createManual(name, groupName, &mPrefabLoader);
         // Planes can never be manifold
         pMesh->setAutoBuildEdgeLists(false);
         // store parameters
@@ -242,7 +260,7 @@ namespace Ogre
         params.vertexShadowBuffer = vertexShadowBuffer;
         params.indexShadowBuffer = indexShadowBuffer;
         params.ySegmentsToKeep = ySegmentsToKeep;
-        mMeshBuildParams[pMesh.get()] = params;
+        mPrefabLoader.mMeshBuildParams[pMesh.get()] = params;
 
         // to preserve previous behaviour, load immediately
         pMesh->load();
@@ -251,7 +269,7 @@ namespace Ogre
     }
 
     //-----------------------------------------------------------------------
-    void MeshManager::tesselate2DMesh(SubMesh* sm, unsigned short meshWidth, unsigned short meshHeight, 
+    void MeshManager::PrefabLoader::tesselate2DMesh(SubMesh* sm, unsigned short meshWidth, unsigned short meshHeight,
         bool doubleSided, HardwareBuffer::Usage indexBufferUsage, bool indexShadowBuffer)
     {
         // The mesh is built, just make a list of indexes to spit out the triangles
@@ -331,44 +349,6 @@ namespace Ogre
 
         }
     }
-
-    //-----------------------------------------------------------------------
-    void MeshManager::createPrefabPlane(void)
-    {
-        MeshPtr msh = create(
-            "Prefab_Plane", 
-            ResourceGroupManager::INTERNAL_RESOURCE_GROUP_NAME, 
-            true, // manually loaded
-            this);
-        // Planes can never be manifold
-        msh->setAutoBuildEdgeLists(false);
-        // to preserve previous behaviour, load immediately
-        msh->load();
-    }
-    //-----------------------------------------------------------------------
-    void MeshManager::createPrefabCube(void)
-    {
-        MeshPtr msh = create(
-            "Prefab_Cube", 
-            ResourceGroupManager::INTERNAL_RESOURCE_GROUP_NAME, 
-            true, // manually loaded
-            this);
-
-        // to preserve previous behaviour, load immediately
-        msh->load();
-    }
-    //-------------------------------------------------------------------------
-    void MeshManager::createPrefabSphere(void)
-    {
-        MeshPtr msh = create(
-            "Prefab_Sphere", 
-            ResourceGroupManager::INTERNAL_RESOURCE_GROUP_NAME, 
-            true, // manually loaded
-            this);
-
-        // to preserve previous behaviour, load immediately
-        msh->load();
-    }
     //-------------------------------------------------------------------------
     void MeshManager::setListener(Ogre::MeshSerializerListener *listener)
     {
@@ -380,7 +360,7 @@ namespace Ogre
         return mListener;
     }
     //-----------------------------------------------------------------------
-    void MeshManager::loadResource(Resource* res)
+    void MeshManager::PrefabLoader::loadResource(Resource* res)
     {
         Mesh* msh = static_cast<Mesh*>(res);
 
@@ -420,7 +400,7 @@ namespace Ogre
     }
 
     //-----------------------------------------------------------------------
-    void MeshManager::loadManualPlane(Mesh* pMesh, MeshBuildParams& params)
+    void MeshManager::PrefabLoader::loadManualPlane(Mesh* pMesh, MeshBuildParams& params)
     {
         if ((params.xsegments + 1) * (params.ysegments + 1) > 65536)
             OGRE_EXCEPT(Exception::ERR_INVALIDPARAMS, 
@@ -435,20 +415,17 @@ namespace Ogre
         VertexDeclaration* vertexDecl = vertexData->vertexDeclaration;
         size_t currOffset = 0;
         // We always need positions
-        vertexDecl->addElement(0, currOffset, VET_FLOAT3, VES_POSITION);
-        currOffset += VertexElement::getTypeSize(VET_FLOAT3);
+        currOffset += vertexDecl->addElement(0, currOffset, VET_FLOAT3, VES_POSITION).getSize();
         // Optional normals
         if(params.normals)
         {
-            vertexDecl->addElement(0, currOffset, VET_FLOAT3, VES_NORMAL);
-            currOffset += VertexElement::getTypeSize(VET_FLOAT3);
+            currOffset += vertexDecl->addElement(0, currOffset, VET_FLOAT3, VES_NORMAL).getSize();
         }
 
         for (unsigned short i = 0; i < params.numTexCoordSets; ++i)
         {
             // Assumes 2D texture coords
-            vertexDecl->addElement(0, currOffset, VET_FLOAT2, VES_TEXTURE_COORDINATES, i);
-            currOffset += VertexElement::getTypeSize(VET_FLOAT2);
+            currOffset += vertexDecl->addElement(0, currOffset, VET_FLOAT2, VES_TEXTURE_COORDINATES, i).getSize();
         }
 
         vertexData->vertexCount = (params.xsegments + 1) * (params.ysegments + 1);
@@ -503,9 +480,7 @@ namespace Ogre
         Real xTex = (1.0f * params.xTile) / params.xsegments;
         Real yTex = (1.0f * params.yTile) / params.ysegments;
         Vector3 vec;
-        Vector3 min = Vector3::ZERO, max = Vector3::UNIT_SCALE;
-        Real maxSquaredLength = 0;
-        bool firstTime = true;
+        AxisAlignedBox aabb;
 
         for (int y = 0; y < params.ysegments + 1; ++y)
         {
@@ -523,19 +498,7 @@ namespace Ogre
                 *pReal++ = vec.z;
 
                 // Build bounds as we go
-                if (firstTime)
-                {
-                    min = vec;
-                    max = vec;
-                    maxSquaredLength = vec.squaredLength();
-                    firstTime = false;
-                }
-                else
-                {
-                    min.makeFloor(vec);
-                    max.makeCeil(vec);
-                    maxSquaredLength = std::max(maxSquaredLength, vec.squaredLength());
-                }
+                aabb.merge(vec);
 
                 if (params.normals)
                 {
@@ -566,11 +529,10 @@ namespace Ogre
         tesselate2DMesh(pSub, params.xsegments + 1, params.ysegments + 1, false, 
             params.indexBufferUsage, params.indexShadowBuffer);
 
-        pMesh->_setBounds(AxisAlignedBox(min, max), true);
-        pMesh->_setBoundingSphereRadius(Math::Sqrt(maxSquaredLength));
+        pMesh->_setBounds(aabb, true);
     }
     //-----------------------------------------------------------------------
-    void MeshManager::loadManualCurvedPlane(Mesh* pMesh, MeshBuildParams& params)
+    void MeshManager::PrefabLoader::loadManualCurvedPlane(Mesh* pMesh, MeshBuildParams& params)
     {
         if ((params.xsegments + 1) * (params.ysegments + 1) > 65536)
             OGRE_EXCEPT(Exception::ERR_INVALIDPARAMS, 
@@ -586,18 +548,15 @@ namespace Ogre
         pMesh->sharedVertexData->vertexCount = (params.xsegments + 1) * (params.ysegments + 1);
 
         size_t offset = 0;
-        decl->addElement(0, offset, VET_FLOAT3, VES_POSITION);
-        offset += VertexElement::getTypeSize(VET_FLOAT3);
+        offset += decl->addElement(0, offset, VET_FLOAT3, VES_POSITION).getSize();
         if (params.normals)
         {
-            decl->addElement(0, 0, VET_FLOAT3, VES_NORMAL);
-            offset += VertexElement::getTypeSize(VET_FLOAT3);
+            offset += decl->addElement(0, 0, VET_FLOAT3, VES_NORMAL).getSize();
         }
 
         for (unsigned short i = 0; i < params.numTexCoordSets; ++i)
         {
-            decl->addElement(0, offset, VET_FLOAT2, VES_TEXTURE_COORDINATES, i);
-            offset += VertexElement::getTypeSize(VET_FLOAT2);
+            offset += decl->addElement(0, offset, VET_FLOAT2, VES_TEXTURE_COORDINATES, i).getSize();
         }
 
 
@@ -648,9 +607,7 @@ namespace Ogre
         Real yTex = (1.0f * params.yTile) / params.ysegments;
         Vector3 vec;
 
-        Vector3 min = Vector3::ZERO, max = Vector3::UNIT_SCALE;
-        Real maxSqLen = 0;
-        bool first = true;
+        AxisAlignedBox aabb;
 
         Real diff_x, diff_y, dist;
 
@@ -676,18 +633,7 @@ namespace Ogre
                 *pFloat++ = pos.z;
 
                 // Record bounds
-                if (first)
-                {
-                    min = max = vec;
-                    maxSqLen = vec.squaredLength();
-                    first = false;
-                }
-                else
-                {
-                    min.makeFloor(vec);
-                    max.makeCeil(vec);
-                    maxSqLen = std::max(maxSqLen, vec.squaredLength());
-                }
+                aabb.merge(vec);
 
                 if (params.normals)
                 {
@@ -720,12 +666,10 @@ namespace Ogre
         tesselate2DMesh(pSub, params.xsegments + 1, params.ysegments + 1, 
             false, params.indexBufferUsage, params.indexShadowBuffer);
 
-        pMesh->_setBounds(AxisAlignedBox(min, max), true);
-        pMesh->_setBoundingSphereRadius(Math::Sqrt(maxSqLen));
-
+        pMesh->_setBounds(aabb, true);
     }
     //-----------------------------------------------------------------------
-    void MeshManager::loadManualCurvedIllusionPlane(Mesh* pMesh, MeshBuildParams& params)
+    void MeshManager::PrefabLoader::loadManualCurvedIllusionPlane(Mesh* pMesh, MeshBuildParams& params)
     {
         if (params.ySegmentsToKeep == -1) params.ySegmentsToKeep = params.ysegments;
 
@@ -743,20 +687,17 @@ namespace Ogre
         VertexDeclaration* vertexDecl = vertexData->vertexDeclaration;
         size_t currOffset = 0;
         // We always need positions
-        vertexDecl->addElement(0, currOffset, VET_FLOAT3, VES_POSITION);
-        currOffset += VertexElement::getTypeSize(VET_FLOAT3);
+        currOffset += vertexDecl->addElement(0, currOffset, VET_FLOAT3, VES_POSITION).getSize();
         // Optional normals
         if(params.normals)
         {
-            vertexDecl->addElement(0, currOffset, VET_FLOAT3, VES_NORMAL);
-            currOffset += VertexElement::getTypeSize(VET_FLOAT3);
+            currOffset += vertexDecl->addElement(0, currOffset, VET_FLOAT3, VES_NORMAL).getSize();
         }
 
         for (unsigned short i = 0; i < params.numTexCoordSets; ++i)
         {
             // Assumes 2D texture coords
-            vertexDecl->addElement(0, currOffset, VET_FLOAT2, VES_TEXTURE_COORDINATES, i);
-            currOffset += VertexElement::getTypeSize(VET_FLOAT2);
+            currOffset += vertexDecl->addElement(0, currOffset, VET_FLOAT2, VES_TEXTURE_COORDINATES, i).getSize();
         }
 
         vertexData->vertexCount = (params.xsegments + 1) * (params.ySegmentsToKeep + 1);
@@ -827,9 +768,7 @@ namespace Ogre
         Real halfWidth = params.width / 2;
         Real halfHeight = params.height / 2;
         Vector3 vec, norm;
-        Vector3 min = Vector3::ZERO, max = Vector3::UNIT_SCALE;
-        Real maxSquaredLength = 0;
-        bool firstTime = true;
+        AxisAlignedBox aabb;
 
         for (int y = params.ysegments - params.ySegmentsToKeep; y < params.ysegments + 1; ++y)
         {
@@ -847,19 +786,7 @@ namespace Ogre
                 *pFloat++ = vec.z;
 
                 // Build bounds as we go
-                if (firstTime)
-                {
-                    min = vec;
-                    max = vec;
-                    maxSquaredLength = vec.squaredLength();
-                    firstTime = false;
-                }
-                else
-                {
-                    min.makeFloor(vec);
-                    max.makeCeil(vec);
-                    maxSquaredLength = std::max(maxSquaredLength, vec.squaredLength());
-                }
+                aabb.merge(vec);
 
                 if (params.normals)
                 {
@@ -904,11 +831,10 @@ namespace Ogre
         tesselate2DMesh(pSub, params.xsegments + 1, params.ySegmentsToKeep + 1, false, 
             params.indexBufferUsage, params.indexShadowBuffer);
 
-        pMesh->_setBounds(AxisAlignedBox(min, max), true);
-        pMesh->_setBoundingSphereRadius(Math::Sqrt(maxSquaredLength));
+        pMesh->_setBounds(aabb, true);
     }
     //-----------------------------------------------------------------------
-    PatchMeshPtr MeshManager::createBezierPatch(const String& name, const String& groupName, 
+    PatchMeshPtr MeshManager::createBezierPatch(const String& name, const String& groupName,
             void* controlPointBuffer, VertexDeclaration *declaration, 
             size_t width, size_t height,
             size_t uMaxSubdivisionLevel, size_t vMaxSubdivisionLevel,

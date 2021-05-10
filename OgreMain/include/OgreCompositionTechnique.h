@@ -30,10 +30,11 @@ THE SOFTWARE.
 
 #include "OgrePrerequisites.h"
 #include "OgrePixelFormat.h"
-#include "OgreIteratorWrappers.h"
 #include "OgreHeaderPrefix.h"
 
 namespace Ogre {
+    template <typename T> class VectorIterator;
+
     /** \addtogroup Core
     *  @{
     */
@@ -66,8 +67,9 @@ namespace Ogre {
             //Texture definition being a reference is determined by these two fields not being empty.
             String refCompName; //If a reference, the name of the compositor being referenced
             String refTexName;  //If a reference, the name of the texture in the compositor being referenced
-            size_t width;       // 0 means adapt to target width
-            size_t height;      // 0 means adapt to target height
+            uint32 width;       // 0 means adapt to target width
+            uint32 height;      // 0 means adapt to target height
+            TextureType type;   // either 2d or cubic
             float widthFactor;  // multiple of target width to use (if width = 0)
             float heightFactor; // multiple of target height to use (if height = 0)
             PixelFormatList formatList; // more than one means MRT
@@ -77,7 +79,7 @@ namespace Ogre {
             bool pooled;        // whether to use pooled textures for this one
             TextureScope scope; // Which scope has access to this texture
 
-            TextureDefinition() :width(0), height(0), widthFactor(1.0f), heightFactor(1.0f), 
+            TextureDefinition() :width(0), height(0), type(TEX_TYPE_2D), widthFactor(1.0f), heightFactor(1.0f),
                 fsaa(true), hwGammaWrite(false), depthBufferId(1), pooled(false), scope(TS_LOCAL) {}
         };
         /// Typedefs for several iterators
@@ -98,7 +100,7 @@ namespace Ogre {
         /** Get a local texture definition.
         @deprecated use getTextureDefinitions()
         */
-        TextureDefinition *getTextureDefinition(size_t idx);
+        OGRE_DEPRECATED TextureDefinition *getTextureDefinition(size_t idx);
         
         /** Get a local texture definition with a specific name.
         */

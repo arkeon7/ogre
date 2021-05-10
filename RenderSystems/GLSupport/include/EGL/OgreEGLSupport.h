@@ -82,8 +82,7 @@ namespace Ogre {
 
             EGLint mEGLMajor, mEGLMinor;
 
-            //virtual EGLWindow* createEGLWindow( EGLSupport * support) = 0;
-
+            bool hasEGL15;
             void initialiseExtensions();
         public:
             EGLSupport(int profile);
@@ -105,6 +104,8 @@ namespace Ogre {
                                     const NameValuePairList *miscParams = 0) {
                 return NULL;
             }
+
+            GLPBuffer* createPBuffer(PixelComponentType format, size_t width, size_t height) override;
 
             ::EGLConfig getGLConfigFromContext(::EGLContext context);
             ::EGLConfig getGLConfigFromDrawable(::EGLSurface drawable,

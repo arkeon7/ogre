@@ -56,7 +56,7 @@ int FFPFog::getExecutionOrder() const
     return FFP_FOG;
 }
 //-----------------------------------------------------------------------
-void FFPFog::updateGpuProgramsParams(Renderable* rend, Pass* pass, const AutoParamDataSource* source, 
+void FFPFog::updateGpuProgramsParams(Renderable* rend, const Pass* pass, const AutoParamDataSource* source,
                                      const LightList* pLightList)
 {   
     if (mFogMode == FOG_NONE)
@@ -102,16 +102,12 @@ bool FFPFog::resolveParameters(ProgramSet* programSet)
     Program* psProgram = programSet->getCpuProgram(GPT_FRAGMENT_PROGRAM);
     Function* vsMain = vsProgram->getEntryPointFunction();
     Function* psMain = psProgram->getEntryPointFunction();
-    bool hasError = false;
-
-    // Resolve world view matrix.
-    mWorldViewProjMatrix = vsProgram->resolveParameter(GpuProgramParameters::ACT_WORLDVIEWPROJ_MATRIX);
     
-    // Resolve vertex shader input position.
-    mVSInPos = vsMain->resolveInputParameter(Parameter::SPC_POSITION_OBJECT_SPACE);
+    // Resolve vertex shader output position.
+    mVSOutPos = vsMain->resolveOutputParameter(Parameter::SPC_POSITION_PROJECTIVE_SPACE);
     
     // Resolve fog colour.
-    mFogColour = psProgram->resolveParameter(GCT_FLOAT4, -1, (uint16)GPV_GLOBAL, "gFogColor");
+    mFogColour = psProgram->resolveParameter(GCT_FLOAT4, "gFogColor");
     
     // Resolve pixel shader output diffuse color.
     mPSOutDiffuse = psMain->resolveOutputParameter(Parameter::SPC_COLOR_DIFFUSE);
@@ -120,39 +116,27 @@ bool FFPFog::resolveParameters(ProgramSet* programSet)
     if (mCalcMode == CM_PER_PIXEL)
     {
         // Resolve fog params.      
-        mFogParams = psProgram->resolveParameter(GCT_FLOAT4, -1, (uint16)GPV_GLOBAL, "gFogParams");
+        mFogParams = psProgram->resolveParameter(GCT_FLOAT4, "gFogParams");
         
         // Resolve vertex shader output depth.      
         mVSOutDepth = vsMain->resolveOutputParameter(Parameter::SPC_DEPTH_VIEW_SPACE);
         
         // Resolve pixel shader input depth.
         mPSInDepth = psMain->resolveInputParameter(mVSOutDepth);
-        
-        hasError |= !(mPSInDepth.get()) || !(mVSOutDepth.get()) || !(mFogParams.get());
     }
     // Per vertex fog.
     else
     {       
         // Resolve fog params.      
-        mFogParams = vsProgram->resolveParameter(GCT_FLOAT4, -1, (uint16)GPV_GLOBAL, "gFogParams");
+        mFogParams = vsProgram->resolveParameter(GCT_FLOAT4, "gFogParams");
         
         // Resolve vertex shader output fog factor.
         mVSOutFogFactor = vsMain->resolveOutputParameter(Parameter::SPC_UNKNOWN, GCT_FLOAT1);
 
         // Resolve pixel shader input fog factor.
         mPSInFogFactor = psMain->resolveInputParameter(mVSOutFogFactor);
-
-        hasError |= !(mPSInFogFactor.get()) || !(mVSOutFogFactor.get()) || !(mFogParams.get());
     }
 
-    hasError |= !(mWorldViewProjMatrix.get()) || !(mVSInPos.get()) || !(mFogColour.get()) || !(mPSOutDiffuse.get());
-        
-    if (hasError)
-    {
-        OGRE_EXCEPT( Exception::ERR_INTERNAL_ERROR, 
-                "Not all parameters could be constructed for the sub-render state.",
-                "FFPFog::resolveParameters" );
-    }
     return true;
 }
 
@@ -194,10 +178,7 @@ bool FFPFog::addFunctionInvocations(ProgramSet* programSet)
     // Per pixel fog.
     if (mCalcMode == CM_PER_PIXEL)
     {
-        //! [func_invoc]
-        auto vsFogStage = vsMain->getStage(FFP_VS_FOG);
-        vsFogStage.callFunction(FFP_FUNC_PIXELFOG_DEPTH, mWorldViewProjMatrix, mVSInPos, mVSOutDepth);
-        //! [func_invoc]
+        vsMain->getStage(FFP_VS_FOG).assign(In(mVSOutPos).w(), mVSOutDepth);
 
         switch (mFogMode)
         {
@@ -236,8 +217,10 @@ bool FFPFog::addFunctionInvocations(ProgramSet* programSet)
             return true;
         }
 
-        vsMain->getStage(FFP_VS_FOG)
-            .callFunction(fogfunc, {In(mWorldViewProjMatrix), In(mVSInPos), In(mFogParams), Out(mVSOutFogFactor)});
+        //! [func_invoc]
+        auto vsFogStage = vsMain->getStage(FFP_VS_FOG);
+        vsFogStage.callFunction(fogfunc, mVSOutPos, mFogParams, mVSOutFogFactor);
+        //! [func_invoc]
         psMain->getStage(FFP_VS_FOG)
             .callFunction(FFP_FUNC_LERP, {In(mFogColour), In(mPSOutDiffuse), In(mPSInFogFactor), Out(mPSOutDiffuse)});
     }
@@ -323,6 +306,18 @@ void FFPFog::setFogProperties(FogMode fogMode,
     mFogParamsValue.w   = fogEnd != fogStart ? 1 / (fogEnd - fogStart) : 0; 
 }
 
+bool FFPFog::setParameter(const String& name, const String& value)
+{
+	if(name == "calc_mode")
+	{
+        CalcMode cm = value == "per_vertex" ? CM_PER_VERTEX : CM_PER_PIXEL;
+		setCalcMode(cm);
+		return true;
+	}
+
+	return false;
+}
+
 //-----------------------------------------------------------------------
 const String& FFPFogFactory::getType() const
 {
@@ -360,14 +355,7 @@ SubRenderState* FFPFogFactory::createInstance(ScriptCompiler* compiler,
                         return NULL;
                     }
 
-                    if (strValue == "per_vertex")
-                    {
-                        fogSubRenderState->setCalcMode(FFPFog::CM_PER_VERTEX);
-                    }
-                    else if (strValue == "per_pixel")
-                    {
-                        fogSubRenderState->setCalcMode(FFPFog::CM_PER_PIXEL);
-                    }
+                    fogSubRenderState->setParameter("calc_mode", strValue);
                 }
                 
                 return subRenderState;

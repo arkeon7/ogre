@@ -30,33 +30,29 @@ THE SOFTWARE.
 
 #include "OgreEntity.h"
 #include "OgreSubEntity.h"
+#include "OgreViewport.h"
 
 namespace Ogre {
-SceneManager::SkyRenderer::SkyRenderer(SceneManager* owner) :
-        mSceneManager(owner),
-        mSkyPlaneEntity(0),
-        mSkyPlaneNode(0),
-        mSkyDomeNode(0),
-        mSkyBoxNode(0),
-        mSkyPlaneEnabled(false),
-        mSkyBoxEnabled(false),
-        mSkyDomeEnabled(false)
+SceneManager::SkyRenderer::SkyRenderer(SceneManager* owner)
+    : mSceneManager(owner), mSceneNode(0), mEnabled(false)
 {
-    // init sky
-    for (size_t i = 0; i < 5; ++i)
-    {
-        mSkyDomeEntity[i] = 0;
-    }
 }
 
-void SceneManager::SkyRenderer::clear()
+void SceneManager::SkyRenderer::nodeDestroyed(const Node*)
 {
     // Remove sky nodes since they've been deleted
-    mSkyBoxNode = mSkyPlaneNode = mSkyDomeNode = 0;
-    mSkyBoxEnabled = mSkyPlaneEnabled = mSkyDomeEnabled = false;
+    mSceneNode = 0;
+    mEnabled = false;
 }
 
-void SceneManager::SkyRenderer::setSkyPlane(
+void SceneManager::SkyRenderer::setEnabled(bool enable)
+{
+    if(enable == mEnabled) return;
+    mEnabled = enable;
+    enable ? mSceneManager->addListener(this) : mSceneManager->removeListener(this);
+}
+
+void SceneManager::SkyPlaneRenderer::setSkyPlane(
                                bool enable,
                                const Plane& plane,
                                const String& materialName,
@@ -83,8 +79,6 @@ void SceneManager::SkyRenderer::setSkyPlane(
         m->setDepthWriteEnabled(false);
         // Ensure loaded
         m->load();
-
-        mSkyPlaneRenderQueue = renderQueue;
 
         // Set up the plane
         MeshPtr planeMesh = MeshManager::getSingleton().getByName(meshName, groupName);
@@ -130,23 +124,25 @@ void SceneManager::SkyRenderer::setSkyPlane(
         mSkyPlaneEntity = static_cast<Entity*>(factory->createInstance(meshName, mSceneManager, &params));
         mSkyPlaneEntity->setMaterialName(materialName, groupName);
         mSkyPlaneEntity->setCastShadows(false);
+        mSkyPlaneEntity->setRenderQueueGroup(renderQueue);
 
         MovableObjectCollection* objectMap = mSceneManager->getMovableObjectCollection(EntityFactory::FACTORY_TYPE_NAME);
         objectMap->map[meshName] = mSkyPlaneEntity;
 
         // Create node and attach
-        if (!mSkyPlaneNode)
+        if (!mSceneNode)
         {
-            mSkyPlaneNode = mSceneManager->createSceneNode(meshName + "Node");
+            mSceneNode = mSceneManager->createSceneNode(meshName + "Node");
+            mSceneNode->setListener(this);
         }
         else
         {
-            mSkyPlaneNode->detachAllObjects();
+            mSceneNode->detachAllObjects();
         }
-        mSkyPlaneNode->attachObject(mSkyPlaneEntity);
+        mSceneNode->attachObject(mSkyPlaneEntity);
 
     }
-    mSkyPlaneEnabled = enable;
+    setEnabled(enable);
     mSkyPlaneGenParameters.skyPlaneBow = bow;
     mSkyPlaneGenParameters.skyPlaneScale = gscale;
     mSkyPlaneGenParameters.skyPlaneTiling = tiling;
@@ -154,7 +150,7 @@ void SceneManager::SkyRenderer::setSkyPlane(
     mSkyPlaneGenParameters.skyPlaneYSegments = ysegments;
 }
 
-void SceneManager::SkyRenderer::setSkyBox(
+void SceneManager::SkyBoxRenderer::setSkyBox(
                              bool enable,
                              const String& materialName,
                              Real distance,
@@ -173,25 +169,27 @@ void SceneManager::SkyRenderer::setSkyBox(
         }
         // Ensure loaded
         m->load();
-        if (!m->getBestTechnique() ||
-            !m->getBestTechnique()->getNumPasses())
+
+        bool valid = m->getBestTechnique() && m->getBestTechnique()->getNumPasses();
+        if(valid)
+        {
+            Pass* pass = m->getBestTechnique()->getPass(0);
+            valid = valid && pass->getNumTextureUnitStates() &&
+                    pass->getTextureUnitState(0)->getTextureType() == TEX_TYPE_CUBE_MAP;
+        }
+
+        if (!valid)
         {
             LogManager::getSingleton().logWarning("skybox material " + materialName +
                                                   " is not supported, defaulting");
             m = MaterialManager::getSingleton().getDefaultSettings();
         }
 
-        bool t3d = false;
-        Pass* pass = m->getBestTechnique()->getPass(0);
-        if (pass->getNumTextureUnitStates() > 0 && pass->getTextureUnitState(0)->is3D())
-            t3d = true;
-
-        mSkyBoxRenderQueue = renderQueue;
-
         // Create node
-        if (!mSkyBoxNode)
+        if (!mSceneNode)
         {
-            mSkyBoxNode = mSceneManager->createSceneNode("SkyBoxNode");
+            mSceneNode = mSceneManager->createSceneNode("SkyBoxNode");
+            mSceneNode->setListener(this);
         }
 
         // Create object
@@ -199,29 +197,23 @@ void SceneManager::SkyRenderer::setSkyBox(
         {
             mSkyBoxObj.reset(new ManualObject("SkyBox"));
             mSkyBoxObj->setCastShadows(false);
-            mSkyBoxNode->attachObject(mSkyBoxObj.get());
+            mSceneNode->attachObject(mSkyBoxObj.get());
         }
         else
         {
             if (!mSkyBoxObj->isAttached())
             {
-                mSkyBoxNode->attachObject(mSkyBoxObj.get());
+                mSceneNode->attachObject(mSkyBoxObj.get());
             }
             mSkyBoxObj->clear();
         }
 
-        mSkyBoxObj->setRenderQueueGroup(mSkyBoxRenderQueue);
+        mSkyBoxObj->setRenderQueueGroup(renderQueue);
+        mSkyBoxObj->begin(materialName, RenderOperation::OT_TRIANGLE_LIST, groupName);
 
-        if (t3d)
-        {
-            mSkyBoxObj->begin(materialName);
-        }
-
-        MaterialManager& matMgr = MaterialManager::getSingleton();
         // Set up the box (6 planes)
         for (uint16 i = 0; i < 6; ++i)
         {
-            Plane plane;
             Vector3 middle;
             Vector3 up, right;
 
@@ -258,110 +250,40 @@ void SceneManager::SkyRenderer::setSkyBox(
                 right = Vector3::UNIT_X * distance;
                 break;
             }
-            // Modify by orientation
-            middle = orientation * middle;
-            up = orientation * up;
-            right = orientation * right;
 
+            // 3D cubic texture
+            // Note UVs mirrored front/back
+            // I could save a few vertices here by sharing the corners
+            // since 3D coords will function correctly but it's really not worth
+            // making the code more complicated for the sake of 16 verts
+            // top left
+            Vector3 pos = middle + up - right;
+            mSkyBoxObj->position(orientation * pos);
+            mSkyBoxObj->textureCoord(pos.normalisedCopy() * Vector3(1,1,-1));
+            // bottom left
+            pos = middle - up - right;
+            mSkyBoxObj->position(orientation * pos);
+            mSkyBoxObj->textureCoord(pos.normalisedCopy() * Vector3(1,1,-1));
+            // bottom right
+            pos = middle - up + right;
+            mSkyBoxObj->position(orientation * pos);
+            mSkyBoxObj->textureCoord(pos.normalisedCopy() * Vector3(1,1,-1));
+            // top right
+            pos = middle + up + right;
+            mSkyBoxObj->position(orientation * pos);
+            mSkyBoxObj->textureCoord(pos.normalisedCopy() * Vector3(1,1,-1));
 
-            if (t3d)
-            {
-                // 3D cubic texture
-                // Note UVs mirrored front/back
-                // I could save a few vertices here by sharing the corners
-                // since 3D coords will function correctly but it's really not worth
-                // making the code more complicated for the sake of 16 verts
-                // top left
-                Vector3 pos;
-                pos = middle + up - right;
-                mSkyBoxObj->position(pos);
-                mSkyBoxObj->textureCoord(pos.normalisedCopy() * Vector3(1,1,-1));
-                // bottom left
-                pos = middle - up - right;
-                mSkyBoxObj->position(pos);
-                mSkyBoxObj->textureCoord(pos.normalisedCopy() * Vector3(1,1,-1));
-                // bottom right
-                pos = middle - up + right;
-                mSkyBoxObj->position(pos);
-                mSkyBoxObj->textureCoord(pos.normalisedCopy() * Vector3(1,1,-1));
-                // top right
-                pos = middle + up + right;
-                mSkyBoxObj->position(pos);
-                mSkyBoxObj->textureCoord(pos.normalisedCopy() * Vector3(1,1,-1));
-
-                uint16 base = i * 4;
-                mSkyBoxObj->quad(base, base+1, base+2, base+3);
-
-            }
-            else // !t3d
-            {
-                // If we're using 6 separate images, have to create 6 materials, one for each frame
-                // Used to use combined material but now we're using queue we can't split to change frame
-                // This doesn't use much memory because textures aren't duplicated
-                String matName = mSceneManager->mName + "SkyBoxPlane" + StringConverter::toString(i);
-                MaterialPtr boxMat = matMgr.getByName(matName, groupName);
-                if (!boxMat)
-                {
-                    // Create new by clone
-                    boxMat = m->clone(matName);
-                    boxMat->load();
-                }
-                else
-                {
-                    // Copy over existing
-                    m->copyDetailsTo(boxMat);
-                    boxMat->load();
-                }
-                // Make sure the material doesn't update the depth buffer
-                boxMat->setDepthWriteEnabled(false);
-                // Set active frame
-                Material::Techniques::const_iterator it;
-                for(it = boxMat->getSupportedTechniques().begin(); it != boxMat->getSupportedTechniques().end(); ++it)
-                {
-                    Technique* tech = *it;
-                    if (tech->getPass(0)->getNumTextureUnitStates() > 0)
-                    {
-                        TextureUnitState* t = tech->getPass(0)->getTextureUnitState(0);
-                        // Also clamp texture, don't wrap (otherwise edges can get filtered)
-                        t->setTextureAddressingMode(TextureUnitState::TAM_CLAMP);
-                        t->setCurrentFrame(i);
-
-                    }
-                }
-
-                // section per material
-                mSkyBoxObj->begin(matName, RenderOperation::OT_TRIANGLE_STRIP, groupName);
-                // bottom left
-                mSkyBoxObj->position(middle - up - right);
-                mSkyBoxObj->textureCoord(0,1);
-                // bottom right
-                mSkyBoxObj->position(middle - up + right);
-                mSkyBoxObj->textureCoord(1,1);
-                // top left
-                mSkyBoxObj->position(middle + up - right);
-                mSkyBoxObj->textureCoord(0,0);
-                // top right
-                mSkyBoxObj->position(middle + up + right);
-                mSkyBoxObj->textureCoord(1,0);
-
-                mSkyBoxObj->end();
-
-            }
-
+            uint16 base = i * 4;
+            mSkyBoxObj->quad(base, base+1, base+2, base+3);
         } // for each plane
 
-        if (t3d)
-        {
-            mSkyBoxObj->end();
-        }
-
-
+        mSkyBoxObj->end();
     }
-    mSkyBoxEnabled = enable;
+    setEnabled(enable);
     mSkyBoxGenParameters.skyBoxDistance = distance;
 }
 
-void SceneManager::SkyRenderer::setSkyDome(
+void SceneManager::SkyDomeRenderer::setSkyDome(
                               bool enable,
                               const String& materialName,
                               Real curvature,
@@ -386,17 +308,15 @@ void SceneManager::SkyRenderer::setSkyDome(
         // Ensure loaded
         m->load();
 
-        //mSkyDomeDrawFirst = drawFirst;
-        mSkyDomeRenderQueue = renderQueue;
-
         // Create node
-        if (!mSkyDomeNode)
+        if (!mSceneNode)
         {
-            mSkyDomeNode = mSceneManager->createSceneNode("SkyDomeNode");
+            mSceneNode = mSceneManager->createSceneNode("SkyDomeNode");
+            mSceneNode->setListener(this);
         }
         else
         {
-            mSkyDomeNode->detachAllObjects();
+            mSceneNode->detachAllObjects();
         }
 
         // Set up the dome (5 planes)
@@ -424,16 +344,18 @@ void SceneManager::SkyRenderer::setSkyDome(
             mSkyDomeEntity[i] = static_cast<Entity*>(factory->createInstance(entName, mSceneManager, &params));
             mSkyDomeEntity[i]->setMaterialName(m->getName(), groupName);
             mSkyDomeEntity[i]->setCastShadows(false);
+            mSkyDomeEntity[i]->setRenderQueueGroup(renderQueue);
+
 
             MovableObjectCollection* objectMap = mSceneManager->getMovableObjectCollection(EntityFactory::FACTORY_TYPE_NAME);
             objectMap->map[entName] = mSkyDomeEntity[i];
 
             // Attach to node
-            mSkyDomeNode->attachObject(mSkyDomeEntity[i]);
+            mSceneNode->attachObject(mSkyDomeEntity[i]);
         } // for each plane
 
     }
-    mSkyDomeEnabled = enable;
+    setEnabled(enable);
     mSkyDomeGenParameters.skyDomeCurvature = curvature;
     mSkyDomeGenParameters.skyDomeDistance = distance;
     mSkyDomeGenParameters.skyDomeTiling = tiling;
@@ -442,79 +364,7 @@ void SceneManager::SkyRenderer::setSkyDome(
     mSkyDomeGenParameters.skyDomeYSegments_keep = ySegmentsToKeep;
 }
 
-//-----------------------------------------------------------------------
-MeshPtr SceneManager::SkyRenderer::createSkyboxPlane(
-                                      BoxPlane bp,
-                                      Real distance,
-                                      const Quaternion& orientation,
-                                      const String& groupName)
-{
-    Plane plane;
-    String meshName;
-    Vector3 up;
-
-    meshName = mSceneManager->mName + "SkyBoxPlane_";
-    // Set up plane equation
-    plane.d = distance;
-    switch(bp)
-    {
-    case BP_FRONT:
-        plane.normal = Vector3::UNIT_Z;
-        up = Vector3::UNIT_Y;
-        meshName += "Front";
-        break;
-    case BP_BACK:
-        plane.normal = -Vector3::UNIT_Z;
-        up = Vector3::UNIT_Y;
-        meshName += "Back";
-        break;
-    case BP_LEFT:
-        plane.normal = Vector3::UNIT_X;
-        up = Vector3::UNIT_Y;
-        meshName += "Left";
-        break;
-    case BP_RIGHT:
-        plane.normal = -Vector3::UNIT_X;
-        up = Vector3::UNIT_Y;
-        meshName += "Right";
-        break;
-    case BP_UP:
-        plane.normal = -Vector3::UNIT_Y;
-        up = Vector3::UNIT_Z;
-        meshName += "Up";
-        break;
-    case BP_DOWN:
-        plane.normal = Vector3::UNIT_Y;
-        up = -Vector3::UNIT_Z;
-        meshName += "Down";
-        break;
-    }
-    // Modify by orientation
-    plane.normal = orientation * plane.normal;
-    up = orientation * up;
-
-
-    // Check to see if existing plane
-    MeshManager& mm = MeshManager::getSingleton();
-    MeshPtr planeMesh = mm.getByName(meshName, groupName);
-    if(planeMesh)
-    {
-        // destroy existing
-        mm.remove(planeMesh->getHandle());
-    }
-    // Create new
-    Real planeSize = distance * 2;
-    const int BOX_SEGMENTS = 1;
-    planeMesh = mm.createPlane(meshName, groupName, plane, planeSize, planeSize,
-        BOX_SEGMENTS, BOX_SEGMENTS, false, 1, 1, 1, up);
-
-    //planeMesh->_dumpContents(meshName);
-
-    return planeMesh;
-
-}
-
-MeshPtr SceneManager::SkyRenderer::createSkydomePlane(
+MeshPtr SceneManager::SkyDomeRenderer::createSkydomePlane(
                                        BoxPlane bp,
                                        Real curvature,
                                        Real tiling,
@@ -588,51 +438,45 @@ MeshPtr SceneManager::SkyRenderer::createSkydomePlane(
 
 }
 
-void SceneManager::SkyRenderer::queueSkiesForRendering(RenderQueue* queue, Camera* cam)
+void SceneManager::SkyPlaneRenderer::_updateRenderQueue(RenderQueue* queue)
 {
-    // Update nodes
-    // Translate the box by the camera position (constant distance)
-    if (mSkyPlaneNode)
+    if (mSkyPlaneEntity->isVisible())
     {
-        // The plane position relative to the camera has already been set up
-        mSkyPlaneNode->setPosition(cam->getDerivedPosition());
-    }
-
-    if (mSkyBoxNode)
-    {
-        mSkyBoxNode->setPosition(cam->getDerivedPosition());
-    }
-
-    if (mSkyDomeNode)
-    {
-        mSkyDomeNode->setPosition(cam->getDerivedPosition());
-    }
-
-    if (mSkyPlaneEnabled
-        && mSkyPlaneEntity && mSkyPlaneEntity->isVisible()
-        && mSkyPlaneEntity->getSubEntity(0) && mSkyPlaneEntity->getSubEntity(0)->isVisible())
-    {
-        queue->addRenderable(mSkyPlaneEntity->getSubEntity(0), mSkyPlaneRenderQueue, OGRE_RENDERABLE_DEFAULT_PRIORITY);
-    }
-
-    if (mSkyBoxEnabled
-        && mSkyBoxObj && mSkyBoxObj->isVisible())
-    {
-        mSkyBoxObj->_updateRenderQueue(queue);
-    }
-
-    if (mSkyDomeEnabled)
-    {
-        for (uint plane = 0; plane < 5; ++plane)
-        {
-            if (mSkyDomeEntity[plane] && mSkyDomeEntity[plane]->isVisible()
-                && mSkyDomeEntity[plane]->getSubEntity(0) && mSkyDomeEntity[plane]->getSubEntity(0)->isVisible())
-            {
-                queue->addRenderable(
-                    mSkyDomeEntity[plane]->getSubEntity(0), mSkyDomeRenderQueue, OGRE_RENDERABLE_DEFAULT_PRIORITY);
-            }
-        }
+        mSkyPlaneEntity->_updateRenderQueue(queue);
     }
 }
 
+void SceneManager::SkyBoxRenderer::_updateRenderQueue(RenderQueue* queue)
+{
+    if (mSkyBoxObj->isVisible())
+    {
+        mSkyBoxObj->_updateRenderQueue(queue);
+    }
+}
+
+void SceneManager::SkyDomeRenderer::_updateRenderQueue(RenderQueue* queue)
+{
+    for (uint plane = 0; plane < 5; ++plane)
+    {
+        if (!mSkyDomeEntity[plane]->isVisible()) continue;
+
+        mSkyDomeEntity[plane]->_updateRenderQueue(queue);
+    }
+}
+
+void SceneManager::SkyRenderer::postFindVisibleObjects(SceneManager* source, IlluminationRenderStage irs,
+                                                       Viewport* vp)
+{
+    // Queue skies, if viewport seems it
+    if (!vp->getSkiesEnabled() || irs == IRS_RENDER_TO_TEXTURE)
+        return;
+
+    if(!mEnabled || !mSceneNode)
+        return;
+
+    // Update nodes
+    // Translate the box by the camera position (constant distance)
+    mSceneNode->setPosition(vp->getCamera()->getDerivedPosition());
+    _updateRenderQueue(source->getRenderQueue());
+}
 }

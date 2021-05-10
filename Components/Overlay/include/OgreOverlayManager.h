@@ -40,6 +40,7 @@ namespace Ogre {
     class OverlayContainer;
     class OverlayElement;
     class OverlayElementFactory;
+    template <typename T> class MapIterator;
 
     /** \addtogroup Optional
     *  @{
@@ -58,12 +59,13 @@ namespace Ogre {
         typedef std::map<String, Overlay*> OverlayMap;
         typedef std::map<String, OverlayElement*> ElementMap;
         typedef std::map<String, OverlayElementFactory*> FactoryMap;
-    protected:
+    private:
         OverlayMap mOverlayMap;
         StringVector mScriptPatterns;
 
         int mLastViewportWidth, mLastViewportHeight;
         OrientationMode mLastViewportOrientationMode;
+        float mPixelRatio;
 
         bool parseChildren( DataStreamPtr& chunk, const String& line, int& l,
             Overlay* pOverlay, bool isTemplate, OverlayContainer* parent = NULL);
@@ -72,6 +74,9 @@ namespace Ogre {
 
         ElementMap mInstances;
         ElementMap mTemplates;
+
+        typedef std::set<String> LoadedScripts;
+        LoadedScripts mLoadedScripts;
 
         std::unique_ptr<ScriptTranslatorManager> mTranslatorManager;
 
@@ -105,6 +110,8 @@ namespace Ogre {
         /// @copydoc ScriptLoader::getLoadingOrder
         Real getLoadingOrder(void) const;
 
+        void addOverlay(Overlay* overlay);
+
         /** Create a new Overlay. */
         Overlay* create(const String& name);
         /** Retrieve an Overlay by name 
@@ -133,12 +140,20 @@ namespace Ogre {
         /** Gets the orientation mode of the destination viewport. */
         OrientationMode getViewportOrientationMode(void) const;
 
+       /** Sets the pixel ratio: how many viewport pixels represent a single overlay pixel (in one dimension).
+
+       By default this is an 1:1 mapping. However on HiDPI screens you want to increase that to scale up your Overlay.
+       @see RenderWindow::getViewPointToPixelScale */
+       void setPixelRatio(float ratio);
+       float getPixelRatio() const;
+
         /** Creates a new OverlayElement of the type requested.
         @remarks
         The type of element to create is passed in as a string because this
         allows plugins to register new types of component.
         @param typeName The type of element to create.
         @param instanceName The name to give the new instance.
+        @param isTemplate
         */
         OverlayElement* createOverlayElement(const String& typeName, const String& instanceName, bool isTemplate = false);
 
@@ -191,12 +206,6 @@ namespace Ogre {
 
         OverlayElement* createOverlayElementFromFactory(const String& typeName, const String& instanceName);
 
-        typedef MapIterator<ElementMap> TemplateIterator;
-        /** Returns an iterator over all templates in this manager.*/
-        TemplateIterator getTemplateIterator ()
-        {
-            return TemplateIterator (mTemplates.begin (), mTemplates.end ()) ;
-        }
         /* Returns whether the Element with the given name is a Template */
         bool isTemplate (String strName) const {
             return (mTemplates.find (strName) != mTemplates.end()) ;

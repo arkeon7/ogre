@@ -100,9 +100,7 @@ namespace Ogre {
     void MeshSerializer::exportMesh(const Mesh* pMesh, const String& filename,
         Endian endianMode)
     {
-        std::fstream *f = OGRE_NEW_T(std::fstream, MEMCATEGORY_GENERAL)();
-        f->open(filename.c_str(), std::ios::binary | std::ios::out);
-        DataStreamPtr stream(OGRE_NEW FileStreamDataStream(f));
+        DataStreamPtr stream = _openFileStream(filename, std::ios::binary | std::ios::out);
 
         exportMesh(pMesh, stream, endianMode);
 
@@ -112,9 +110,7 @@ namespace Ogre {
     void MeshSerializer::exportMesh(const Mesh* pMesh, const String& filename,
                                     MeshVersion version, Endian endianMode)
     {
-        std::fstream *f = OGRE_NEW_T(std::fstream, MEMCATEGORY_GENERAL)();
-        f->open(filename.c_str(), std::ios::binary | std::ios::out);
-        DataStreamPtr stream(OGRE_NEW FileStreamDataStream(f));
+        DataStreamPtr stream = _openFileStream(filename, std::ios::binary | std::ios::out);
         
         exportMesh(pMesh, stream, version, endianMode);
         
@@ -159,7 +155,7 @@ namespace Ogre {
         impl->exportMesh(pMesh, stream, endianMode);
     }
     //---------------------------------------------------------------------
-    void MeshSerializer::importMesh(DataStreamPtr& stream, Mesh* pDest)
+    void MeshSerializer::importMesh(const DataStreamPtr& stream, Mesh* pDest)
     {
         determineEndianness(stream);
 
@@ -199,9 +195,8 @@ namespace Ogre {
         // Warn on old version of mesh
         if (ver != mVersionData[0]->versionString)
         {
-            LogManager::getSingleton().logWarning( pDest->getName() +
-                " is an older format (" + ver + "); you should upgrade it as soon as possible" +
-                " using the OgreMeshUpgrade tool.");
+            LogManager::getSingleton().logWarning(pDest->getName() + " uses an old format " + ver +
+                                                  "; upgrade with the OgreMeshUpgrader tool");
         }
 
         if(mListener)

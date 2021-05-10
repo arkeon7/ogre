@@ -31,7 +31,7 @@ THE SOFTWARE.
 
 #include "OgrePagingPrerequisites.h"
 #include "OgrePageStrategy.h"
-#include "OgreVector3.h"
+#include "OgreVector.h"
 
 namespace Ogre
 {
@@ -103,7 +103,6 @@ namespace Ogre
     */
     class _OgrePagingExport Grid3DPageStrategyData : public PageStrategyData
     {
-    protected:
         /// Origin (world space)
         Vector3 mWorldOrigin;
         /// Origin (grid-aligned world space)

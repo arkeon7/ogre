@@ -15,11 +15,14 @@ uniform float	lightGloss;
 
 #if DEPTH_SHADOWRECEIVER
 uniform float invShadowMapSize;
-uniform sampler2DShadow shadowMap;
+uniform sampler2D shadowMap;
 
-//declare external function
-//vec4 calcDepthShadow(in vec4 inColour, in float lum);
-float calcDepthShadow(sampler2DShadow shadowMap, vec4 uv, float invShadowMapSize);
+float calcDepthShadow(sampler2D shadowMap, vec4 uv, float invShadowMapSize)
+{
+    uv /= uv.w;
+    uv.z = uv.z * 0.5 + 0.5; // convert -1..1 to 0..1
+    return texture2D(shadowMap, uv.xy).x >= uv.z ? 1.0 : 0.0;
+}
 #endif
 
 varying vec2 _uv0;

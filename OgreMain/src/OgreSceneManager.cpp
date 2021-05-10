@@ -46,28 +46,22 @@ THE SOFTWARE.
 #include "OgreRenderTexture.h"
 #include "OgreLodListener.h"
 #include "OgreUnifiedHighLevelGpuProgram.h"
+#include "OgreDefaultDebugDrawer.h"
 
 // This class implements the most basic scene manager
 
 #include <cstdio>
 
 namespace Ogre {
-
-//-----------------------------------------------------------------------
-uint32 SceneManager::WORLD_GEOMETRY_TYPE_MASK   = 0x80000000;
-uint32 SceneManager::ENTITY_TYPE_MASK           = 0x40000000;
-uint32 SceneManager::FX_TYPE_MASK               = 0x20000000;
-uint32 SceneManager::STATICGEOMETRY_TYPE_MASK   = 0x10000000;
-uint32 SceneManager::LIGHT_TYPE_MASK            = 0x08000000;
-uint32 SceneManager::FRUSTUM_TYPE_MASK          = 0x04000000;
-uint32 SceneManager::USER_TYPE_MASK_LIMIT         = SceneManager::FRUSTUM_TYPE_MASK;
 //-----------------------------------------------------------------------
 SceneManager::SceneManager(const String& name) :
 mName(name),
 mLastRenderQueueInvocationCustom(false),
 mCameraInProgress(0),
 mCurrentViewport(0),
-mSkyRenderer(this),
+mSkyPlane(this),
+mSkyBox(this),
+mSkyDome(this),
 mFogMode(FOG_NONE),
 mFogColour(),
 mFogStart(0),
@@ -88,21 +82,15 @@ mShowBoundingBoxes(false),
 mActiveCompositorChain(0),
 mLateMaterialResolving(false),
 mIlluminationStage(IRS_NONE),
-mShadowTextureConfigDirty(true),
-mShadowCasterRenderBackFaces(true),
 mLightClippingInfoMapFrameNumber(999),
-mShadowTextureSelfShadow(false),
 mVisibilityMask(0xFFFFFFFF),
 mFindVisibleObjects(true),
 mSuppressRenderStateChanges(false),
 mSuppressShadows(false),
 mCameraRelativeRendering(false),
 mLastLightHash(0),
-mLastLightLimit(0),
 mGpuParamsDirty((uint16)GPV_ALL)
 {
-    mShadowCasterQueryListener.reset(new ShadowCasterSceneQueryListener(this));
-
     Root *root = Root::getSingletonPtr();
     if (root)
         _setDestinationRenderSystem(root->getRenderSystem());
@@ -113,15 +101,16 @@ mGpuParamsDirty((uint16)GPV_ALL)
     // init shadow texture config
     setShadowTextureCount(1);
 
+    mDebugDrawer.reset(new DefaultDebugDrawer());
+    addListener(mDebugDrawer.get());
+
     // create the auto param data source instance
     mAutoParamDataSource.reset(createAutoParamDataSource());
-
 }
 //-----------------------------------------------------------------------
 SceneManager::~SceneManager()
 {
     fireSceneManagerDestroyed();
-    mShadowRenderer.destroyShadowTextures();
     clearScene();
     destroyAllCameras();
 
@@ -210,7 +199,7 @@ Camera* SceneManager::createCamera(const String& name)
     }
 
     Camera *c = OGRE_NEW Camera(name, this);
-    mCameras.insert(CameraList::value_type(name, c));
+    mCameras.emplace(name, c);
 
     // create visible bounds aab map entry
     mCamVisibleObjectsMap[c] = VisibleObjectsBoundsInfo();
@@ -364,10 +353,11 @@ void SceneManager::_populateLightList(const Vector3& position, Real radius,
     destList.clear();
     destList.reserve(candidateLights.size());
 
-    LightList::const_iterator it;
-    for (it = candidateLights.begin(); it != candidateLights.end(); ++it)
+    size_t lightIndex = 0;
+    size_t numShadowTextures = isShadowTechniqueTextureBased() ? getShadowTextureConfigList().size() : 0;
+
+    for (Light* lt : candidateLights)
     {
-        Light* lt = *it;
         // check whether or not this light is suppose to be taken into consideration for the current light mask set for this operation
         if(!(lt->getLightMask() & lightMask))
             continue; //skip this light
@@ -375,48 +365,29 @@ void SceneManager::_populateLightList(const Vector3& position, Real radius,
         // Calc squared distance
         lt->_calcTempSquareDist(position);
 
-        if (lt->getType() == Light::LT_DIRECTIONAL)
+        // only add in-range lights, but ensure texture shadow casters are there
+        // note: in this case the first numShadowTextures canditate lights are casters
+        if (lightIndex++ < numShadowTextures || lt->isInLightRange(Sphere(position, radius)))
         {
-            // Always included
             destList.push_back(lt);
         }
-        else
-        {
-            // only add in-range lights
-            if (lt->isInLightRange(Sphere(position,radius)))
-            {
-                destList.push_back(lt);
-            }
-        }
     }
 
+    auto start = destList.begin();
+    // if we're using texture shadows, we actually want to use
+    // the first few lights unchanged from the frustum list, matching the
+    // texture shadows that were generated
+    // Thus we only allow object-relative sorting on the remainder of the list
+    std::advance(start, std::min(numShadowTextures, destList.size()));
     // Sort (stable to guarantee ordering on directional lights)
-    if (isShadowTechniqueTextureBased())
-    {
-        // Note that if we're using texture shadows, we actually want to use
-        // the first few lights unchanged from the frustum list, matching the
-        // texture shadows that were generated
-        // Thus we only allow object-relative sorting on the remainder of the list
-        if (destList.size() > getShadowTextureCount())
-        {
-            LightList::iterator start = destList.begin();
-            std::advance(start, getShadowTextureCount());
-            std::stable_sort(start, destList.end(), lightLess());
-        }
-    }
-    else
-    {
-        std::stable_sort(destList.begin(), destList.end(), lightLess());
-    }
+    std::stable_sort(start, destList.end(), lightLess());
 
     // Now assign indexes in the list so they can be examined if needed
-    size_t lightIndex = 0;
-    for (LightList::iterator li = destList.begin(); li != destList.end(); ++li, ++lightIndex)
+    lightIndex = 0;
+    for (auto lt : destList)
     {
-        (*li)->_notifyIndexInFrame(lightIndex);
+        lt->_notifyIndexInFrame(lightIndex++);
     }
-
-
 }
 //-----------------------------------------------------------------------
 void SceneManager::_populateLightList(const SceneNode* sn, Real radius, LightList& destList, uint32 lightMask) 
@@ -700,6 +671,7 @@ void SceneManager::destroyAllParticleSystems(void)
 //-----------------------------------------------------------------------
 void SceneManager::clearScene(void)
 {
+    mShadowRenderer.destroyShadowTextures();
     destroyAllStaticGeometry();
     destroyAllInstanceManagers();
     destroyAllMovableObjects();
@@ -715,14 +687,13 @@ void SceneManager::clearScene(void)
         OGRE_DELETE *i;
     }
     mSceneNodes.clear();
+    mNamedNodes.clear();
     mAutoTrackingSceneNodes.clear();
 
 
     
     // Clear animations
     destroyAllAnimations();
-
-    mSkyRenderer.clear();
 
     // Clear render queue, empty completely
     if (mRenderQueue)
@@ -745,6 +716,7 @@ SceneNode* SceneManager::createSceneNode(void)
 {
     SceneNode* sn = createSceneNodeImpl();
     mSceneNodes.push_back(sn);
+    sn->mGlobalIndex = mSceneNodes.size() - 1;
     return sn;
 }
 //-----------------------------------------------------------------------
@@ -761,22 +733,16 @@ SceneNode* SceneManager::createSceneNode(const String& name)
 
     SceneNode* sn = createSceneNodeImpl(name);
     mSceneNodes.push_back(sn);
+    mNamedNodes[name] = sn;
+    sn->mGlobalIndex = mSceneNodes.size() - 1;
     return sn;
 }
 //-----------------------------------------------------------------------
-struct SceneNodeNameExists {
-    const String& name;
-    bool operator()(const SceneNode* sn) {
-        return sn->getName() == name;
-    }
-};
 void SceneManager::destroySceneNode(const String& name)
 {
-    SceneNodeList::iterator i;
     OgreAssert(!name.empty(), "name must not be empty");
-    SceneNodeNameExists pred = {name};
-    i = std::find_if(mSceneNodes.begin(), mSceneNodes.end(), pred);
-    _destroySceneNode(i);
+    auto i = mNamedNodes.find(name);
+    destroySceneNode(i != mNamedNodes.end() ? i->second : NULL);
 }
 
 void SceneManager::_destroySceneNode(SceneNodeList::iterator i)
@@ -816,8 +782,14 @@ void SceneManager::_destroySceneNode(SceneNodeList::iterator i)
     {
         parentNode->removeChild(*i);
     }
+    if(!(*i)->getName().empty())
+        mNamedNodes.erase((*i)->getName());
     OGRE_DELETE *i;
-    std::swap(*i, mSceneNodes.back());
+    if (std::next(i) != mSceneNodes.end())
+    {
+       std::swap(*i, mSceneNodes.back());
+       (*i)->mGlobalIndex = i - mSceneNodes.begin();
+    }
     mSceneNodes.pop_back();
 }
 //---------------------------------------------------------------------
@@ -826,7 +798,12 @@ void SceneManager::destroySceneNode(SceneNode* sn)
     if(!sn)
         OGRE_EXCEPT(Exception::ERR_INVALIDPARAMS, "Cannot destroy a null SceneNode.", "SceneManager::destroySceneNode");
 
-    _destroySceneNode(std::find(mSceneNodes.begin(), mSceneNodes.end(), sn));
+    auto pos = sn->mGlobalIndex < mSceneNodes.size() &&
+                       sn == *(mSceneNodes.begin() + sn->mGlobalIndex)
+                   ? mSceneNodes.begin() + sn->mGlobalIndex
+                   : mSceneNodes.end();
+
+    _destroySceneNode(pos);
 }
 //-----------------------------------------------------------------------
 SceneNode* SceneManager::getRootSceneNode(void)
@@ -843,13 +820,11 @@ SceneNode* SceneManager::getRootSceneNode(void)
 //-----------------------------------------------------------------------
 SceneNode* SceneManager::getSceneNode(const String& name, bool throwExceptionIfNotFound) const
 {
-    SceneNodeList::const_iterator i;
     OgreAssert(!name.empty(), "name must not be empty");
-    SceneNodeNameExists pred = {name};
-    i = std::find_if(mSceneNodes.begin(), mSceneNodes.end(), pred);
+    auto i = mNamedNodes.find(name);
 
-    if (i != mSceneNodes.end())
-        return *i;
+    if (i != mNamedNodes.end())
+        return i->second;
 
     if (throwExceptionIfNotFound)
         OGRE_EXCEPT(Exception::ERR_ITEM_NOT_FOUND, "SceneNode '" + name + "' not found.");
@@ -895,7 +870,6 @@ const Pass* SceneManager::_setPass(const Pass* pass, bool evenIfSuppressed,
     GpuProgram* fprog = pass->hasFragmentProgram() ? pass->getFragmentProgram().get() : 0;
 
     bool passSurfaceAndLightParams = !vprog || vprog->getPassSurfaceAndLightStates();
-    bool passFogParams = !fprog || fprog->getPassFogStates();
 
     if (vprog)
     {
@@ -977,18 +951,6 @@ const Pass* SceneManager::_setPass(const Pass* pass, bool evenIfSuppressed,
 
     if (passSurfaceAndLightParams)
     {
-        // Set surface reflectance properties, only valid if lighting is enabled
-        if (pass->getLightingEnabled())
-        {
-            mDestRenderSystem->_setSurfaceParams(
-                pass->getAmbient(),
-                pass->getDiffuse(),
-                pass->getSpecular(),
-                pass->getSelfIllumination(),
-                pass->getShininess(),
-                pass->getVertexColourTracking() );
-        }
-
         // Dynamic lighting enabled?
         mDestRenderSystem->setLightingEnabled(pass->getLightingEnabled());
     }
@@ -1018,44 +980,35 @@ const Pass* SceneManager::_setPass(const Pass* pass, bool evenIfSuppressed,
         // Set fixed-function fragment settings
     }
 
-    if (passFogParams)
+    // fog params can either be from scene or from material
+    const auto& newFogColour = pass->getFogOverride() ? pass->getFogColour() : mFogColour;
+    FogMode newFogMode;
+    Real newFogStart, newFogEnd, newFogDensity;
+    if (pass->getFogOverride())
     {
-        // New fog params can either be from scene or from material
-        FogMode newFogMode;
-        ColourValue newFogColour;
-        Real newFogStart, newFogEnd, newFogDensity;
-        if (pass->getFogOverride())
-        {
-            // New fog params from material
-            newFogMode = pass->getFogMode();
-            newFogColour = pass->getFogColour();
-            newFogStart = pass->getFogStart();
-            newFogEnd = pass->getFogEnd();
-            newFogDensity = pass->getFogDensity();
-        }
-        else
-        {
-            // New fog params from scene
-            newFogMode = mFogMode;
-            newFogColour = mFogColour;
-            newFogStart = mFogStart;
-            newFogEnd = mFogEnd;
-            newFogDensity = mFogDensity;
-        }
-
-        /* In D3D, it applies to shaders prior
-        to version vs_3_0 and ps_3_0. And in OGL, it applies to "ARB_fog_XXX" in
-        fragment program, and in other ways, them maybe access by gpu program via
-        "state.fog.XXX".
-        */
-        mDestRenderSystem->_setFog(newFogMode, newFogColour, newFogDensity, newFogStart, newFogEnd);
+        // fog params from material
+        newFogMode = pass->getFogMode();
+        newFogStart = pass->getFogStart();
+        newFogEnd = pass->getFogEnd();
+        newFogDensity = pass->getFogDensity();
     }
-    // Tell params about ORIGINAL fog
-    // Need to be able to override fixed function fog, but still have
-    // original fog parameters available to a shader than chooses to use
-    mAutoParamDataSource->setFog(mFogMode, mFogColour, mFogDensity, mFogStart, mFogEnd);
+    else
+    {
+        // fog params from scene
+        newFogMode = mFogMode;
+        newFogStart = mFogStart;
+        newFogEnd = mFogEnd;
+        newFogDensity = mFogDensity;
+    }
+
+    mAutoParamDataSource->setFog(newFogMode, newFogColour, newFogDensity, newFogStart, newFogEnd);
 
     // The rest of the settings are the same no matter whether we use programs or not
+
+    if(mDestRenderSystem->getCapabilities()->hasCapability(RSC_FIXED_FUNCTION) && passSurfaceAndLightParams)
+    {
+        mFixedFunctionParams = mDestRenderSystem->getFixedFunctionParams(pass->getVertexColourTracking(), newFogMode);
+    }
 
     // Set scene blending
     mDestRenderSystem->setColourBlendState(pass->getBlendState());
@@ -1065,22 +1018,13 @@ const Pass* SceneManager::_setPass(const Pass* pass, bool evenIfSuppressed,
         mDestRenderSystem->_setLineWidth(pass->getLineWidth());
 
     // Set point parameters
-    mDestRenderSystem->_setPointParameters(
-        pass->getPointSize(),
-        pass->isPointAttenuationEnabled(),
-        pass->getPointAttenuationConstant(),
-        pass->getPointAttenuationLinear(),
-        pass->getPointAttenuationQuadratic(),
-        pass->getPointMinSize(),
-        pass->getPointMaxSize());
+    mDestRenderSystem->_setPointParameters(pass->isPointAttenuationEnabled(), pass->getPointMinSize(),
+                                           pass->getPointMaxSize());
 
     if (mDestRenderSystem->getCapabilities()->hasCapability(RSC_POINT_SPRITES))
         mDestRenderSystem->_setPointSpritesEnabled(pass->getPointSpritesEnabled());
 
-    mAutoParamDataSource->setPointParameters(
-        pass->getPointSize(), pass->isPointAttenuationEnabled(),
-        pass->getPointAttenuationConstant(), pass->getPointAttenuationLinear(),
-        pass->getPointAttenuationQuadratic());
+    mAutoParamDataSource->setPointParameters(pass->isPointAttenuationEnabled(), pass->getPointAttenuation());
 
     // Texture unit settings
     size_t unit = 0;
@@ -1106,36 +1050,15 @@ const Pass* SceneManager::_setPass(const Pass* pass, bool evenIfSuppressed,
             // if that's the case, we have to bind when lights are iterated
             // in renderSingleObject
 
-            TexturePtr shadowTex;
-            if (shadowTexIndex < mShadowRenderer.mShadowTextures.size())
-            {
-                shadowTex = getShadowTexture(shadowTexIndex);
-                // Hook up projection frustum
-                Camera *cam = shadowTex->getBuffer()->getRenderTarget()->getViewport(0)->getCamera();
-                // Enable projective texturing if fixed-function, but also need to
-                // disable it explicitly for program pipeline.
-                pTex->setProjectiveTexturing(!pass->hasVertexProgram(), cam);
-                mAutoParamDataSource->setTextureProjector(cam, shadowTexUnitIndex);
-            }
-            else
-            {
-                // Use fallback 'null' shadow texture
-                // no projection since all uniform colour anyway
-                shadowTex = mShadowRenderer.mNullShadowTexture;
-                pTex->setProjectiveTexturing(false);
-                mAutoParamDataSource->setTextureProjector(0, shadowTexUnitIndex);
-            }
-            pTex->_setTexturePtr(shadowTex);
-
+            mShadowRenderer.resolveShadowTexture(pTex, shadowTexIndex, shadowTexUnitIndex);
             ++shadowTexIndex;
             ++shadowTexUnitIndex;
         }
-        else if (mIlluminationStage == IRS_NONE && pass->hasVertexProgram())
+        else if (mIlluminationStage == IRS_NONE)
         {
             // Manually set texture projector for shaders if present
             // This won't get set any other way if using manual projection
-            TextureUnitState::EffectMap::const_iterator effi =
-                pTex->getEffects().find(TextureUnitState::ET_PROJECTIVE_TEXTURE);
+            auto effi = pTex->getEffects().find(TextureUnitState::ET_PROJECTIVE_TEXTURE);
             if (effi != pTex->getEffects().end())
             {
                 mAutoParamDataSource->setTextureProjector(effi->second.frustum, unit);
@@ -1144,28 +1067,17 @@ const Pass* SceneManager::_setPass(const Pass* pass, bool evenIfSuppressed,
         if (pTex->getContentType() == TextureUnitState::CONTENT_COMPOSITOR)
         {
             CompositorChain* currentChain = _getActiveCompositorChain();
-            if (!currentChain)
-            {
-                OGRE_EXCEPT(Exception::ERR_INVALID_STATE,
-                    "A pass that wishes to reference a compositor texture "
-                    "attempted to render in a pipeline without a compositor",
-                    "SceneManager::_setPass");
-            }
-            CompositorInstance* refComp = currentChain->getCompositor(pTex->getReferencedCompositorName());
-            if (refComp == 0)
-            {
-                OGRE_EXCEPT(Exception::ERR_ITEM_NOT_FOUND,
-                    "Invalid compositor content_type compositor name",
-                    "SceneManager::_setPass");
-            }
-            TexturePtr refTex = refComp->getTextureInstance(pTex->getReferencedTextureName(),
-                                                            pTex->getReferencedMRTIndex());
-            if (!refTex)
-            {
-                OGRE_EXCEPT(Exception::ERR_ITEM_NOT_FOUND,
-                    "Invalid compositor content_type texture name",
-                    "SceneManager::_setPass");
-            }
+            OgreAssert(currentChain, "A pass that wishes to reference a compositor texture "
+                                     "attempted to render in a pipeline without a compositor");
+            auto compName = pTex->getReferencedCompositorName();
+            CompositorInstance* refComp = currentChain->getCompositor(compName);
+            OgreAssert(refComp,
+                       ("Current CompositorChain does not contain compositor named " + compName).c_str());
+
+            auto texName = pTex->getReferencedTextureName();
+            TexturePtr refTex = refComp->getTextureInstance(texName, pTex->getReferencedMRTIndex());
+
+            OgreAssert(refTex, ("Compositor " + compName + " does not declare texture " + texName).c_str());
             pTex->_setTexturePtr(refTex);
         }
         mDestRenderSystem->_setTextureUnitSettings(unit, *pTex);
@@ -1176,9 +1088,8 @@ const Pass* SceneManager::_setPass(const Pass* pass, bool evenIfSuppressed,
 
     // Set up non-texture related material settings
     // Depth buffer settings
-    mDestRenderSystem->_setDepthBufferFunction(pass->getDepthFunction());
-    mDestRenderSystem->_setDepthBufferCheckEnabled(pass->getDepthCheckEnabled());
-    mDestRenderSystem->_setDepthBufferWriteEnabled(pass->getDepthWriteEnabled());
+    mDestRenderSystem->_setDepthBufferParams(pass->getDepthCheckEnabled(), pass->getDepthWriteEnabled(),
+                                             pass->getDepthFunction());
     mDestRenderSystem->_setDepthBias(pass->getDepthBiasConstant(), pass->getDepthBiasSlopeScale());
     // Alpha-reject settings
     mDestRenderSystem->_setAlphaRejectSettings(pass->getAlphaRejectFunction(),
@@ -1187,7 +1098,7 @@ const Pass* SceneManager::_setPass(const Pass* pass, bool evenIfSuppressed,
 
     // Culling mode
     if (isShadowTechniqueTextureBased() && mIlluminationStage == IRS_RENDER_TO_TEXTURE &&
-        mShadowCasterRenderBackFaces && pass->getCullingMode() == CULL_CLOCKWISE)
+        mShadowRenderer.mShadowCasterRenderBackFaces && pass->getCullingMode() == CULL_CLOCKWISE)
     {
         // render back faces into shadow caster, can help with depth comparison
         mPassCullingMode = CULL_ANTICLOCKWISE;
@@ -1255,7 +1166,7 @@ void SceneManager::prepareRenderQueue(void)
 
             // Default all the queue groups that are there, new ones will be created
             // with defaults too
-            for (size_t i = 0; i < RENDER_QUEUE_MAX; ++i)
+            for (size_t i = 0; i < RENDER_QUEUE_COUNT; ++i)
             {
                 if(!q->_getQueueGroups()[i])
                     continue;
@@ -1274,11 +1185,17 @@ void SceneManager::prepareRenderQueue(void)
 //-----------------------------------------------------------------------
 void SceneManager::_renderScene(Camera* camera, Viewport* vp, bool includeOverlays)
 {
-    OgreProfileGroup("_renderScene", OGREPROF_GENERAL);
+    assert(camera);
+    OgreProfileGroup(camera->getName(), OGREPROF_GENERAL);
 
-    Root::getSingleton()._pushCurrentSceneManager(this);
+    auto prevSceneManager = Root::getSingleton()._getCurrentSceneManager();
+    Root::getSingleton()._setCurrentSceneManager(this);
     mActiveQueuedRenderableVisitor->targetSceneMgr = this;
     mAutoParamDataSource->setCurrentSceneManager(this);
+
+    // preserve the previous scheme, in case this is a RTT update with an outer _renderScene pending
+    MaterialManager& matMgr = MaterialManager::getSingleton();
+    String prevMaterialScheme = matMgr.getActiveScheme();
 
     // Also set the internal viewport pointer at this point, for calls that need it
     // However don't call setViewport just yet (see below)
@@ -1288,8 +1205,7 @@ void SceneManager::_renderScene(Camera* camera, Viewport* vp, bool includeOverla
 	mDestRenderSystem->setDrawBuffer(mCurrentViewport->getDrawBuffer());
 	
     // reset light hash so even if light list is the same, we refresh the content every frame
-    LightList emptyLightList;
-    useLights(emptyLightList, 0, true);
+    useLights(NULL, 0);
 
     if (isShadowTechniqueInUse())
     {
@@ -1302,8 +1218,7 @@ void SceneManager::_renderScene(Camera* camera, Viewport* vp, bool includeOverla
     // to prevent dark caps getting clipped
     if (isShadowTechniqueStencilBased() && 
         camera->getProjectionType() == PT_PERSPECTIVE &&
-        camera->getFarClipDistance() != 0 && 
-        mDestRenderSystem->getCapabilities()->hasCapability(RSC_INFINITE_FAR_PLANE) && 
+        camera->getFarClipDistance() != 0 &&
         mShadowRenderer.mShadowUseInfiniteFarPlane)
     {
         // infinite far distance
@@ -1342,8 +1257,12 @@ void SceneManager::_renderScene(Camera* camera, Viewport* vp, bool includeOverla
             {
                 (*atsni)->_autoTrack();
             }
+#ifdef OGRE_NODELESS_POSITIONING
             // Auto-track camera if required
+            OGRE_IGNORE_DEPRECATED_BEGIN
             camera->_autoTrack();
+            OGRE_IGNORE_DEPRECATED_END
+#endif
         }
 
         if (mIlluminationStage != IRS_RENDER_TO_TEXTURE && mFindVisibleObjects)
@@ -1351,40 +1270,29 @@ void SceneManager::_renderScene(Camera* camera, Viewport* vp, bool includeOverla
             // Locate any lights which could be affecting the frustum
             findLightsAffectingFrustum(camera);
 
-            // Are we using any shadows at all?
-            if (isShadowTechniqueInUse() && vp->getShadowsEnabled())
+            // Prepare shadow textures if texture shadow based shadowing
+            // technique in use
+            if (isShadowTechniqueTextureBased() && vp->getShadowsEnabled())
             {
-                // Prepare shadow textures if texture shadow based shadowing
-                // technique in use
-                if (isShadowTechniqueTextureBased())
-                {
-                    OgreProfileGroup("prepareShadowTextures", OGREPROF_GENERAL);
+                OgreProfileGroup("prepareShadowTextures", OGREPROF_GENERAL);
 
-                    // *******
-                    // WARNING
-                    // *******
-                    // This call will result in re-entrant calls to this method
-                    // therefore anything which comes before this is NOT 
-                    // guaranteed persistent. Make sure that anything which 
-                    // MUST be specific to this camera / target is done 
-                    // AFTER THIS POINT
-                    prepareShadowTextures(camera, vp);
-                    // reset the cameras & viewport because of the re-entrant call
-                    mCameraInProgress = camera;
-                    mCurrentViewport = vp;
-                }
+                // *******
+                // WARNING
+                // *******
+                // This call will result in re-entrant calls to this method
+                // therefore anything which comes before this is NOT
+                // guaranteed persistent. Make sure that anything which
+                // MUST be specific to this camera / target is done
+                // AFTER THIS POINT
+                prepareShadowTextures(camera, vp);
+                // reset the cameras & viewport because of the re-entrant call
+                mCameraInProgress = camera;
+                mCurrentViewport = vp;
             }
         }
 
         // Invert vertex winding?
-        if (camera->isReflected())
-        {
-            mDestRenderSystem->setInvertVertexWinding(true);
-        }
-        else
-        {
-            mDestRenderSystem->setInvertVertexWinding(false);
-        }
+        mDestRenderSystem->setInvertVertexWinding(camera->isReflected());
 
         // Set the viewport - this is deliberately after the shadow texture update
         setViewport(vp);
@@ -1433,11 +1341,6 @@ void SceneManager::_renderScene(Camera* camera, Viewport* vp, bool includeOverla
 
             mAutoParamDataSource->setMainCamBoundsInfo(&(camVisObjIt->second));
         }
-        // Queue skies, if viewport seems it
-        if (vp->getSkiesEnabled() && mFindVisibleObjects && mIlluminationStage != IRS_RENDER_TO_TEXTURE)
-        {
-            mSkyRenderer.queueSkiesForRendering(getRenderQueue(), camera);
-        }
     } // end lock on scene graph mutex
 
     mDestRenderSystem->_beginGeometryCount();
@@ -1455,19 +1358,7 @@ void SceneManager::_renderScene(Camera* camera, Viewport* vp, bool includeOverla
     // Set rasterisation mode
     mDestRenderSystem->_setPolygonMode(camera->getPolygonMode());
 
-    // Set initial camera state
-    mDestRenderSystem->_setProjectionMatrix(mCameraInProgress->getProjectionMatrixRS());
-    
-    mCachedViewMatrix = mCameraInProgress->getViewMatrix(true);
-
-    if (mCameraRelativeRendering)
-    {
-        mCachedViewMatrix.setTrans(Vector3::ZERO);
-    }
     mDestRenderSystem->_setTextureProjectionRelativeTo(mCameraRelativeRendering, camera->getDerivedPosition());
-
-    
-    setViewMatrix(mCachedViewMatrix);
 
     // Render scene content
     {
@@ -1484,21 +1375,14 @@ void SceneManager::_renderScene(Camera* camera, Viewport* vp, bool includeOverla
     // Notify camera of vis batches
     camera->_notifyRenderedBatches(mDestRenderSystem->_getBatchCount());
 
-    Root::getSingleton()._popCurrentSceneManager(this);
+    matMgr.setActiveScheme(prevMaterialScheme);
+    Root::getSingleton()._setCurrentSceneManager(prevSceneManager);
 }
 //-----------------------------------------------------------------------
 void SceneManager::_setDestinationRenderSystem(RenderSystem* sys)
 {
     mDestRenderSystem = sys;
     mShadowRenderer.mDestRenderSystem = sys;
-
-    if(sys)
-    {
-        if (sys->getName().find("Direct3D11") != String::npos)
-        {
-            UnifiedHighLevelGpuProgram::setPriority("hlsl", 1);
-        }
-    }
 }
 //-----------------------------------------------------------------------
 void SceneManager::_releaseManualHardwareResources()
@@ -1541,24 +1425,6 @@ void SceneManager::_restoreManualHardwareResources()
             i->second->_restoreManualHardwareResources();
     }
 }
-//-----------------------------------------------------------------------
-void SceneManager::prepareWorldGeometry(const String& filename)
-{
-    // This default implementation cannot handle world geometry
-    OGRE_EXCEPT(Exception::ERR_INVALIDPARAMS,
-        "World geometry is not supported by the generic SceneManager.",
-        "SceneManager::prepareWorldGeometry");
-}
-//-----------------------------------------------------------------------
-void SceneManager::prepareWorldGeometry(DataStreamPtr& stream, 
-    const String& typeName)
-{
-    // This default implementation cannot handle world geometry
-    OGRE_EXCEPT(Exception::ERR_INVALIDPARAMS,
-        "World geometry is not supported by the generic SceneManager.",
-        "SceneManager::prepareWorldGeometry");
-}
-
 //-----------------------------------------------------------------------
 void SceneManager::setWorldGeometry(const String& filename)
 {
@@ -1610,17 +1476,16 @@ void SceneManager::setSkyPlane(
                                int xsegments, int ysegments,
                                const String& groupName)
 {
-    mSkyRenderer.setSkyPlane(
-        enable, plane, materialName, gscale, tiling,
-        static_cast<uint8>(drawFirst ? RENDER_QUEUE_SKIES_EARLY : RENDER_QUEUE_SKIES_LATE), bow,
-        xsegments, ysegments, groupName);
+    _setSkyPlane(enable, plane, materialName, gscale, tiling,
+                 drawFirst ? RENDER_QUEUE_SKIES_EARLY : RENDER_QUEUE_SKIES_LATE, bow, xsegments, ysegments,
+                 groupName);
 }
 
 void SceneManager::_setSkyPlane(bool enable, const Plane& plane, const String& materialName,
                                 Real gscale, Real tiling, uint8 renderQueue, Real bow,
                                 int xsegments, int ysegments, const String& groupName)
 {
-    mSkyRenderer.setSkyPlane(enable, plane, materialName, gscale, tiling, renderQueue, bow,
+    mSkyPlane.setSkyPlane(enable, plane, materialName, gscale, tiling, renderQueue, bow,
                              xsegments, ysegments, groupName);
 }
 
@@ -1633,16 +1498,15 @@ void SceneManager::setSkyBox(
                              const Quaternion& orientation,
                              const String& groupName)
 {
-    mSkyRenderer.setSkyBox(enable, materialName, distance,
-        static_cast<uint8>(drawFirst?RENDER_QUEUE_SKIES_EARLY: RENDER_QUEUE_SKIES_LATE), 
-        orientation, groupName);
+    _setSkyBox(enable, materialName, distance,
+               drawFirst ? RENDER_QUEUE_SKIES_EARLY : RENDER_QUEUE_SKIES_LATE, orientation, groupName);
 }
 
 void SceneManager::_setSkyBox(bool enable, const String& materialName, Real distance,
                               uint8 renderQueue, const Quaternion& orientation,
                               const String& groupName)
 {
-    mSkyRenderer.setSkyBox(enable, materialName, distance, renderQueue, orientation, groupName);
+    mSkyBox.setSkyBox(enable, materialName, distance, renderQueue, orientation, groupName);
 }
 
 //-----------------------------------------------------------------------
@@ -1657,9 +1521,9 @@ void SceneManager::setSkyDome(
                               int xsegments, int ysegments, int ySegmentsToKeep,
                               const String& groupName)
 {
-    mSkyRenderer.setSkyDome(enable, materialName, curvature, tiling, distance,
-        static_cast<uint8>(drawFirst?RENDER_QUEUE_SKIES_EARLY: RENDER_QUEUE_SKIES_LATE), 
-        orientation, xsegments, ysegments, ySegmentsToKeep, groupName);
+    _setSkyDome(enable, materialName, curvature, tiling, distance,
+                drawFirst ? RENDER_QUEUE_SKIES_EARLY : RENDER_QUEUE_SKIES_LATE, orientation, xsegments,
+                ysegments, ySegmentsToKeep, groupName);
 }
 
 void SceneManager::_setSkyDome(bool enable, const String& materialName, Real curvature, Real tiling,
@@ -1667,7 +1531,7 @@ void SceneManager::_setSkyDome(bool enable, const String& materialName, Real cur
                                int xsegments, int ysegments, int ysegments_keep,
                                const String& groupName)
 {
-    mSkyRenderer.setSkyDome(enable, materialName, curvature, tiling, distance, renderQueue,
+    mSkyDome.setSkyDome(enable, materialName, curvature, tiling, distance, renderQueue,
                             orientation, xsegments, ysegments, ysegments_keep, groupName);
 }
 
@@ -1768,7 +1632,7 @@ void SceneManager::renderVisibleObjectsDefaultSequence(void)
     // Render each separate queue
     const RenderQueue::RenderQueueGroupMap& groups = getRenderQueue()->_getQueueGroups();
 
-    for (uint8 qId = 0; qId < RENDER_QUEUE_MAX; ++qId)
+    for (uint8 qId = 0; qId < RENDER_QUEUE_COUNT; ++qId)
     {
         if(!groups[qId])
             continue;
@@ -1892,7 +1756,7 @@ bool SceneManager::validateRenderableForRendering(const Pass* pass, const Render
         isShadowTechniqueTextureBased())
     {
         if (mIlluminationStage == IRS_RENDER_RECEIVER_PASS && 
-            rend->getCastsShadows() && !mShadowTextureSelfShadow)
+            rend->getCastsShadows() && !mShadowRenderer.mShadowTextureSelfShadow)
         {
             return false;
         }
@@ -1916,8 +1780,6 @@ void SceneManager::renderObjects(const QueuedRenderableCollection& objs,
                                  const LightList* manualLightList,
                                  bool transparentShadowCastersMode)
 {
-    mDestRenderSystem->setAmbientLight(mAutoParamDataSource->getAmbientLightColour());
-
     mActiveQueuedRenderableVisitor->autoLights = doLightIteration;
     mActiveQueuedRenderableVisitor->manualLightList = manualLightList;
     mActiveQueuedRenderableVisitor->transparentShadowCastersMode = transparentShadowCastersMode;
@@ -1963,11 +1825,10 @@ void SceneManager::renderBasicQueueGroupObjects(RenderQueueGroup* pGroup,
 {
     // Basic render loop
     // Iterate through priorities
-    RenderQueueGroup::PriorityMapIterator groupIt = pGroup->getIterator();
 
-    while (groupIt.hasMoreElements())
+    for (const auto& pg : pGroup->getPriorityGroups())
     {
-        RenderPriorityGroup* pPriorityGrp = groupIt.getNext();
+        RenderPriorityGroup* pPriorityGrp = pg.second;
 
         // Sort the queue first
         pPriorityGrp->sort(mCameraInProgress);
@@ -1984,30 +1845,32 @@ void SceneManager::renderBasicQueueGroupObjects(RenderQueueGroup* pGroup,
     }// for each priority
 }
 //-----------------------------------------------------------------------
-void SceneManager::setWorldTransform(Renderable* rend, bool fixedFunction)
+void SceneManager::setWorldTransform(Renderable* rend)
 {
-    // Set world transformation
-    if (fixedFunction)
+    // Issue view / projection changes if any
+    // Check view matrix
+    if (rend->getUseIdentityView())
     {
-        mDestRenderSystem->_setWorldMatrix(mAutoParamDataSource->getWorldMatrix());
+        mGpuParamsDirty |= (uint16)GPV_GLOBAL;
+        mResetIdentityView = true;
     }
 
-    // Issue view / projection changes if any
-    useRenderableViewProjMode(rend, fixedFunction);
+    if (rend->getUseIdentityProjection())
+    {
+        mGpuParamsDirty |= (uint16)GPV_GLOBAL;
+
+        mResetIdentityProj = true;
+    }
 
     // mark per-object params as dirty
     mGpuParamsDirty |= (uint16)GPV_PER_OBJECT;
 }
 //-----------------------------------------------------------------------
 void SceneManager::issueRenderWithLights(Renderable* rend, const Pass* pass,
-                                         const LightList* pLightListToUse, bool fixedFunction,
+                                         const LightList* pLightListToUse,
                                          bool lightScissoringClipping)
 {
-    // Do we need to update light states?
-    // Only do this if fixed-function vertex lighting applies
-    if (pLightListToUse && (pass->isProgrammable() || pass->getLightingEnabled()))
-        useLights(*pLightListToUse, pass->getMaxSimultaneousLights(), fixedFunction);
-
+    useLights(pLightListToUse, pass->getMaxSimultaneousLights());
     fireRenderSingleObject(rend, pass, mAutoParamDataSource.get(), pLightListToUse, false);
 
     // optional light scissoring & clipping
@@ -2045,17 +1908,12 @@ void SceneManager::renderSingleObject(Renderable* rend, const Pass* pass,
                                       bool lightScissoringClipping, bool doLightIteration,
                                       const LightList* manualLightList)
 {
-    OgreProfileBeginGPUEvent("Material: " + pass->getParent()->getParent()->getName());
-
-    GpuProgram* vprog = pass->hasVertexProgram() ? pass->getVertexProgram().get() : 0;
-
-    // pass the FFP transform state to shader
-    bool passTransformState = !vprog || vprog->getPassTransformStates();
+    OgreProfileBeginGPUEvent(pass->getParent()->getParent()->getName());
 
     // Tell auto params object about the renderable change
     mAutoParamDataSource->setCurrentRenderable(rend);
 
-    setWorldTransform(rend, passTransformState);
+    setWorldTransform(rend);
 
     if(mSuppressRenderStateChanges)
     {
@@ -2064,14 +1922,10 @@ void SceneManager::renderSingleObject(Renderable* rend, const Pass* pass,
         mDestRenderSystem->setCurrentPassIterationCount(1);
         _issueRenderOp(rend, NULL);
         // Reset view / projection changes if any
-        resetViewProjMode(passTransformState);
-        OgreProfileEndGPUEvent("Material: " + pass->getParent()->getParent()->getName());
+        resetViewProjMode();
+        OgreProfileEndGPUEvent(pass->getParent()->getParent()->getName());
         return;
     }
-
-    // pass the FFP lighting state to shader
-    bool passLightParams =
-        pass->getLightingEnabled() && (!vprog || vprog->getPassSurfaceAndLightStates());
 
     // Reissue any texture gen settings which are dependent on view matrix
     size_t unit = 0;
@@ -2145,12 +1999,12 @@ void SceneManager::renderSingleObject(Renderable* rend, const Pass* pass,
             (manualLightList && (manualLightList->size() != 1 ||
                                  manualLightList->front()->getType() == pass->getOnlyLightType())))
         {
-            issueRenderWithLights(rend, pass, manualLightList, passLightParams, lightScissoringClipping);
+            issueRenderWithLights(rend, pass, manualLightList, lightScissoringClipping);
         }
 
         // Reset view / projection changes if any
-        resetViewProjMode(passTransformState);
-        OgreProfileEndGPUEvent("Material: " + pass->getParent()->getParent()->getName());
+        resetViewProjMode();
+        OgreProfileEndGPUEvent(pass->getParent()->getParent()->getName());
         return;
     }
 
@@ -2321,12 +2175,12 @@ void SceneManager::renderSingleObject(Renderable* rend, const Pass* pass,
         }
         depthInc += pass->getPassIterationCount();
 
-        issueRenderWithLights(rend, pass, pLightListToUse, passLightParams, lightScissoringClipping);
+        issueRenderWithLights(rend, pass, pLightListToUse, lightScissoringClipping);
     } // possibly iterate per light
     
     // Reset view / projection changes if any
-    resetViewProjMode(passTransformState);
-    OgreProfileEndGPUEvent("Material: " + pass->getParent()->getParent()->getName());
+    resetViewProjMode();
+    OgreProfileEndGPUEvent(pass->getParent()->getParent()->getName());
 }
 //-----------------------------------------------------------------------
 void SceneManager::setAmbientLight(const ColourValue& colour)
@@ -2543,19 +2397,15 @@ void SceneManager::_applySceneAnimations(void)
         Animation* anim = getAnimation(state->getAnimationName());
 
         // Reset any nodes involved
-        Animation::NodeTrackIterator nodeTrackIt = anim->getNodeTrackIterator();
-        while(nodeTrackIt.hasMoreElements())
+        for (const auto& it : anim->_getNodeTrackList())
         {
-            Node* nd = nodeTrackIt.getNext()->getAssociatedNode();
-            if (nd)
+            if (Node* nd = it.second->getAssociatedNode())
                 nd->resetToInitialState();
         }
 
-        Animation::NumericTrackIterator numTrackIt = anim->getNumericTrackIterator();
-        while(numTrackIt.hasMoreElements())
+        for (const auto& it : anim->_getNumericTrackList())
         {
-            const AnimableValuePtr& animPtr = numTrackIt.getNext()->getAssociatedAnimable();
-            if (animPtr)
+            if (const auto& animPtr = it.second->getAssociatedAnimable())
                 animPtr->resetToBaseValue();
         }
     }
@@ -2581,27 +2431,19 @@ void SceneManager::manualRender(RenderOperation* rend,
     if (doBeginEndFrame)
         mDestRenderSystem->_beginFrame();
 
-    mDestRenderSystem->_setWorldMatrix(worldMatrix);
-    setViewMatrix(viewMatrix);
-    mDestRenderSystem->_setProjectionMatrix(projMatrix);
-
-    _setPass(pass);
-    // Do we need to update GPU program parameters?
-    if (pass->isProgrammable())
+    auto usedPass = _setPass(pass);
+    mAutoParamDataSource->setCurrentRenderable(0);
+    if (vp)
     {
-        mAutoParamDataSource->setCurrentRenderable(0);
-        if (vp)
-        {
-            mAutoParamDataSource->setCurrentRenderTarget(vp->getTarget());
-        }
-        mAutoParamDataSource->setCurrentSceneManager(this);
-        mAutoParamDataSource->setWorldMatrices(&worldMatrix, 1);
-        Camera dummyCam(BLANKSTRING, 0);
-        dummyCam.setCustomViewMatrix(true, viewMatrix);
-        dummyCam.setCustomProjectionMatrix(true, projMatrix);
-        mAutoParamDataSource->setCurrentCamera(&dummyCam, false);
-        updateGpuProgramParameters(pass);
+        mAutoParamDataSource->setCurrentRenderTarget(vp->getTarget());
     }
+    mAutoParamDataSource->setCurrentSceneManager(this);
+    mAutoParamDataSource->setWorldMatrices(&worldMatrix, 1);
+    Camera dummyCam(BLANKSTRING, 0);
+    dummyCam.setCustomViewMatrix(true, viewMatrix);
+    dummyCam.setCustomProjectionMatrix(true, projMatrix);
+    mAutoParamDataSource->setCurrentCamera(&dummyCam, false);
+    updateGpuProgramParameters(usedPass);
     mDestRenderSystem->_render(*rend);
 
     if (doBeginEndFrame)
@@ -2620,75 +2462,35 @@ void SceneManager::manualRender(Renderable* rend, const Pass* pass, Viewport* vp
     if (doBeginEndFrame)
         mDestRenderSystem->_beginFrame();
 
-    setViewMatrix(viewMatrix);
-    mDestRenderSystem->_setProjectionMatrix(projMatrix);
-
-    _setPass(pass);
+    auto usedPass = _setPass(pass);
     Camera dummyCam(BLANKSTRING, 0);
     dummyCam.setCustomViewMatrix(true, viewMatrix);
     dummyCam.setCustomProjectionMatrix(true, projMatrix);
-    // Do we need to update GPU program parameters?
-    if (pass->isProgrammable())
+
+    if (vp)
     {
-        if (vp)
-        {
-            mAutoParamDataSource->setCurrentRenderTarget(vp->getTarget());
-        }
-        
-		const Camera* oldCam = mAutoParamDataSource->getCurrentCamera();
-
-		mAutoParamDataSource->setCurrentSceneManager(this);
-        mAutoParamDataSource->setCurrentCamera(&dummyCam, false);
-        updateGpuProgramParameters(pass);
-
-		mAutoParamDataSource->setCurrentCamera(oldCam, false);
+        mAutoParamDataSource->setCurrentRenderTarget(vp->getTarget());
     }
 
-    renderSingleObject(rend, pass, lightScissoringClipping, doLightIteration, manualLightList);
+    const Camera* oldCam = mAutoParamDataSource->getCurrentCamera();
+
+    mAutoParamDataSource->setCurrentSceneManager(this);
+    mAutoParamDataSource->setCurrentCamera(&dummyCam, false);
+
+    renderSingleObject(rend, usedPass, lightScissoringClipping, doLightIteration, manualLightList);
+
+    mAutoParamDataSource->setCurrentCamera(oldCam, false);
 
     if (doBeginEndFrame)
         mDestRenderSystem->_endFrame();
 
 }
 //---------------------------------------------------------------------
-void SceneManager::useRenderableViewProjMode(const Renderable* pRend, bool fixedFunction)
-{
-    // Check view matrix
-    bool useIdentityView = pRend->getUseIdentityView();
-    if (useIdentityView)
-    {
-        // Using identity view now, change it
-        if (fixedFunction)
-            setViewMatrix(Affine3::IDENTITY);
-        mGpuParamsDirty |= (uint16)GPV_GLOBAL;
-        mResetIdentityView = true;
-    }
-
-    bool useIdentityProj = pRend->getUseIdentityProjection();
-    if (useIdentityProj)
-    {
-        // Use identity projection matrix, still need to take RS depth into account.
-        if (fixedFunction)
-        {
-            Matrix4 mat;
-            mDestRenderSystem->_convertProjectionMatrix(Matrix4::IDENTITY, mat);
-            mDestRenderSystem->_setProjectionMatrix(mat);
-        }
-        mGpuParamsDirty |= (uint16)GPV_GLOBAL;
-
-        mResetIdentityProj = true;
-    }
-
-    
-}
-//---------------------------------------------------------------------
-void SceneManager::resetViewProjMode(bool fixedFunction)
+void SceneManager::resetViewProjMode()
 {
     if (mResetIdentityView)
     {
         // Coming back to normal from identity view
-        if (fixedFunction)
-            setViewMatrix(mCachedViewMatrix);
         mGpuParamsDirty |= (uint16)GPV_GLOBAL;
 
         mResetIdentityView = false;
@@ -2697,8 +2499,6 @@ void SceneManager::resetViewProjMode(bool fixedFunction)
     if (mResetIdentityProj)
     {
         // Coming back from flat projection
-        if (fixedFunction)
-            mDestRenderSystem->_setProjectionMatrix(mCameraInProgress->getProjectionMatrixRS());
         mGpuParamsDirty |= (uint16)GPV_GLOBAL;
 
         mResetIdentityProj = false;
@@ -2971,7 +2771,7 @@ void SceneManager::updateRenderQueueSplitOptions(void)
     }
     else // texture based
     {
-        getRenderQueue()->setShadowCastersCannotBeReceivers(!mShadowTextureSelfShadow);
+        getRenderQueue()->setShadowCastersCannotBeReceivers(!mShadowRenderer.mShadowTextureSelfShadow);
     }
 
     if (isShadowTechniqueAdditive() && !isShadowTechniqueIntegrated()
@@ -3009,7 +2809,7 @@ void SceneManager::updateRenderQueueGroupSplitOptions(RenderQueueGroup* group,
     }
     else if (isShadowTechniqueTextureBased()) 
     {
-        group->setShadowCastersCannotBeReceivers(!mShadowTextureSelfShadow);
+        group->setShadowCastersCannotBeReceivers(!mShadowRenderer.mShadowTextureSelfShadow);
     }
 
     if (!suppressShadows && mCurrentViewport->getShadowsEnabled() &&
@@ -3164,141 +2964,6 @@ void SceneManager::findLightsAffectingFrustum(const Camera* camera)
     }
 
 }
-//---------------------------------------------------------------------
-bool SceneManager::ShadowCasterSceneQueryListener::queryResult(
-    MovableObject* object)
-{
-    if (object->getCastShadows() && object->isVisible() && 
-        mSceneMgr->isRenderQueueToBeProcessed(object->getRenderQueueGroup()) &&
-        // objects need an edge list to cast shadows (shadow volumes only)
-        ((mSceneMgr->getShadowTechnique() & SHADOWDETAILTYPE_TEXTURE) ||
-        ((mSceneMgr->getShadowTechnique() & SHADOWDETAILTYPE_STENCIL) && object->hasEdgeList())
-        )
-       )
-    {
-        if (mFarDistSquared)
-        {
-            // Check object is within the shadow far distance
-            Vector3 toObj = object->getParentNode()->_getDerivedPosition() 
-                - mCamera->getDerivedPosition();
-            Real radius = object->getWorldBoundingSphere().getRadius();
-            Real dist =  toObj.squaredLength();               
-            if (dist - (radius * radius) > mFarDistSquared)
-            {
-                // skip, beyond max range
-                return true;
-            }
-        }
-
-        // If the object is in the frustum, we can always see the shadow
-        if (mCamera->isVisible(object->getWorldBoundingBox()))
-        {
-            mCasterList->push_back(object);
-            return true;
-        }
-
-        // Otherwise, object can only be casting a shadow into our view if
-        // the light is outside the frustum (or it's a directional light, 
-        // which are always outside), and the object is intersecting
-        // on of the volumes formed between the edges of the frustum and the
-        // light
-        if (!mIsLightInFrustum || mLight->getType() == Light::LT_DIRECTIONAL)
-        {
-            // Iterate over volumes
-            PlaneBoundedVolumeList::const_iterator i, iend;
-            iend = mLightClipVolumeList->end();
-            for (i = mLightClipVolumeList->begin(); i != iend; ++i)
-            {
-                if (i->intersects(object->getWorldBoundingBox()))
-                {
-                    mCasterList->push_back(object);
-                    return true;
-                }
-
-            }
-
-        }
-    }
-    return true;
-}
-//---------------------------------------------------------------------
-bool SceneManager::ShadowCasterSceneQueryListener::queryResult(
-    SceneQuery::WorldFragment* fragment)
-{
-    // don't deal with world geometry
-    return true;
-}
-//---------------------------------------------------------------------
-const SceneManager::ShadowCasterList& SceneManager::findShadowCastersForLight(
-    const Light* light, const Camera* camera)
-{
-    mShadowCasterList.clear();
-
-    if (light->getType() == Light::LT_DIRECTIONAL)
-    {
-        // Basic AABB query encompassing the frustum and the extrusion of it
-        AxisAlignedBox aabb;
-        const Vector3* corners = camera->getWorldSpaceCorners();
-        Vector3 min, max;
-        Vector3 extrude = light->getDerivedDirection() * -mShadowRenderer.mShadowDirLightExtrudeDist;
-        // do first corner
-        min = max = corners[0];
-        min.makeFloor(corners[0] + extrude);
-        max.makeCeil(corners[0] + extrude);
-        for (size_t c = 1; c < 8; ++c)
-        {
-            min.makeFloor(corners[c]);
-            max.makeCeil(corners[c]);
-            min.makeFloor(corners[c] + extrude);
-            max.makeCeil(corners[c] + extrude);
-        }
-        aabb.setExtents(min, max);
-
-        if (!mShadowCasterAABBQuery)
-            mShadowCasterAABBQuery.reset(createAABBQuery(aabb));
-        else
-            mShadowCasterAABBQuery->setBox(aabb);
-        // Execute, use callback
-        mShadowCasterQueryListener->prepare(false, 
-            &(light->_getFrustumClipVolumes(camera)), 
-            light, camera, &mShadowCasterList, light->getShadowFarDistanceSquared());
-        mShadowCasterAABBQuery->execute(mShadowCasterQueryListener.get());
-
-
-    }
-    else
-    {
-        Sphere s(light->getDerivedPosition(), light->getAttenuationRange());
-        // eliminate early if camera cannot see light sphere
-        if (camera->isVisible(s))
-        {
-            if (!mShadowCasterSphereQuery)
-                mShadowCasterSphereQuery.reset(createSphereQuery(s));
-            else
-                mShadowCasterSphereQuery->setSphere(s);
-
-            // Determine if light is inside or outside the frustum
-            bool lightInFrustum = camera->isVisible(light->getDerivedPosition());
-            const PlaneBoundedVolumeList* volList = 0;
-            if (!lightInFrustum)
-            {
-                // Only worth building an external volume list if
-                // light is outside the frustum
-                volList = &(light->_getFrustumClipVolumes(camera));
-            }
-
-            // Execute, use callback
-            mShadowCasterQueryListener->prepare(lightInFrustum, 
-                volList, light, camera, &mShadowCasterList, light->getShadowFarDistanceSquared());
-            mShadowCasterSphereQuery->execute(mShadowCasterQueryListener.get());
-
-        }
-
-    }
-
-
-    return mShadowCasterList;
-}
 void SceneManager::initShadowVolumeMaterials()
 {
     mShadowRenderer.initShadowVolumeMaterials();
@@ -3309,12 +2974,7 @@ const RealRect& SceneManager::getLightScissorRect(Light* l, const Camera* cam)
     checkCachedLightClippingInfo();
 
     // Re-use calculations if possible
-    LightClippingInfoMap::iterator ci = mLightClippingInfoMap.find(l);
-    if (ci == mLightClippingInfoMap.end())
-    {
-        // create new entry
-        ci = mLightClippingInfoMap.insert(LightClippingInfoMap::value_type(l, LightClippingInfo())).first;
-    }
+    LightClippingInfoMap::iterator ci = mLightClippingInfoMap.emplace(l, LightClippingInfo()).first;
     if (!ci->second.scissorValid)
     {
 
@@ -3328,9 +2988,6 @@ const RealRect& SceneManager::getLightScissorRect(Light* l, const Camera* cam)
 //---------------------------------------------------------------------
 ClipResult SceneManager::buildAndSetScissor(const LightList& ll, const Camera* cam)
 {
-    if (!mDestRenderSystem->getCapabilities()->hasCapability(RSC_SCISSOR_TEST))
-        return CLIPPED_NONE;
-
     RealRect finalRect;
     // init (inverted since we want to grow from nothing)
     finalRect.left = finalRect.bottom = 1.0f;
@@ -3366,16 +3023,13 @@ ClipResult SceneManager::buildAndSetScissor(const LightList& ll, const Camera* c
         finalRect.bottom > -1.0f || finalRect.top < 1.0f)
     {
         // Turn normalised device coordinates into pixels
-        int iLeft, iTop, iWidth, iHeight;
-        mCurrentViewport->getActualDimensions(iLeft, iTop, iWidth, iHeight);
-        size_t szLeft, szRight, szTop, szBottom;
+        Rect vp = mCurrentViewport->getActualDimensions();
 
-        szLeft = (size_t)(iLeft + ((finalRect.left + 1) * 0.5 * iWidth));
-        szRight = (size_t)(iLeft + ((finalRect.right + 1) * 0.5 * iWidth));
-        szTop = (size_t)(iTop + ((-finalRect.top + 1) * 0.5 * iHeight));
-        szBottom = (size_t)(iTop + ((-finalRect.bottom + 1) * 0.5 * iHeight));
-
-        mDestRenderSystem->setScissorTest(true, szLeft, szTop, szRight, szBottom);
+        Rect scissor(vp.left + ((finalRect.left + 1) * 0.5 * vp.width()),
+                     vp.top + ((-finalRect.top + 1) * 0.5 * vp.height()),
+                     vp.left + ((finalRect.right + 1) * 0.5 * vp.width()),
+                     vp.top + ((-finalRect.bottom + 1) * 0.5 * vp.height()));
+        mDestRenderSystem->setScissorTest(true, scissor);
 
         return CLIPPED_SOME;
     }
@@ -3393,9 +3047,6 @@ void SceneManager::buildScissor(const Light* light, const Camera* cam, RealRect&
 //---------------------------------------------------------------------
 void SceneManager::resetScissor()
 {
-    if (!mDestRenderSystem->getCapabilities()->hasCapability(RSC_SCISSOR_TEST))
-        return;
-
     mDestRenderSystem->setScissorTest(false);
 }
 //---------------------------------------------------------------------
@@ -3425,12 +3076,8 @@ const PlaneList& SceneManager::getLightClippingPlanes(Light* l)
     checkCachedLightClippingInfo();
 
     // Try to re-use clipping info if already calculated
-    LightClippingInfoMap::iterator ci = mLightClippingInfoMap.find(l);
-    if (ci == mLightClippingInfoMap.end())
-    {
-        // create new entry
-        ci = mLightClippingInfoMap.insert(LightClippingInfoMap::value_type(l, LightClippingInfo())).first;
-    }
+    LightClippingInfoMap::iterator ci = mLightClippingInfoMap.emplace(l, LightClippingInfo()).first;
+
     if (!ci->second.clipPlanesValid)
     {
         buildLightClip(l, ci->second.clipPlanes);
@@ -3513,14 +3160,8 @@ void SceneManager::buildLightClip(const Light* l, PlaneList& planes)
             {
                 up = Vector3::UNIT_Z;
             }
-            // cross twice to rederive, only direction is unaltered
-            Vector3 right = dir.crossProduct(up);
-            right.normalise();
-            up = right.crossProduct(dir);
-            up.normalise();
-            // Derive quaternion from axes (negate dir since -Z)
-            Quaternion q;
-            q.FromAxes(right, up, -dir);
+            // Derive rotation from axes (negate dir since -Z)
+            Matrix3 q = Math::lookRotation(-dir, up);
 
             // derive pyramid corner vectors in world orientation
             Vector3 tl, tr, bl, br;
@@ -3582,137 +3223,16 @@ void SceneManager::setShadowIndexBufferSize(size_t size)
     mShadowRenderer.setShadowIndexBufferSize(size);
 }
 //---------------------------------------------------------------------
-void SceneManager::setShadowTextureConfig(size_t shadowIndex, unsigned short width, 
-    unsigned short height, PixelFormat format, unsigned short fsaa, uint16 depthBufferPoolId )
-{
-    ShadowTextureConfig conf;
-    conf.width = width;
-    conf.height = height;
-    conf.format = format;
-    conf.fsaa = fsaa;
-    conf.depthBufferPoolId = depthBufferPoolId;
-
-    setShadowTextureConfig(shadowIndex, conf);
-
-
-}
-//---------------------------------------------------------------------
-void SceneManager::setShadowTextureConfig(size_t shadowIndex, 
-    const ShadowTextureConfig& config)
-{
-    if (shadowIndex >= mShadowTextureConfigList.size())
-    {
-        OGRE_EXCEPT(Exception::ERR_ITEM_NOT_FOUND, 
-            "shadowIndex out of bounds",
-            "SceneManager::setShadowTextureConfig");
-    }
-    mShadowTextureConfigList[shadowIndex] = config;
-
-    mShadowTextureConfigDirty = true;
-}
-//---------------------------------------------------------------------
 ConstShadowTextureConfigIterator SceneManager::getShadowTextureConfigIterator() const
 {
     return ConstShadowTextureConfigIterator(
-        mShadowTextureConfigList.begin(), mShadowTextureConfigList.end());
-
-}
-//---------------------------------------------------------------------
-void SceneManager::setShadowTextureSize(unsigned short size)
-{
-    // default all current
-    for (ShadowTextureConfigList::iterator i = mShadowTextureConfigList.begin();
-        i != mShadowTextureConfigList.end(); ++i)
-    {
-        if (i->width != size || i->height != size)
-        {
-            i->width = i->height = size;
-            mShadowTextureConfigDirty = true;
-        }
-    }
-
-}
-//---------------------------------------------------------------------
-void SceneManager::setShadowTextureCount(size_t count)
-{
-    // Change size, any new items will need defaults
-    if (count != mShadowTextureConfigList.size())
-    {
-        // if no entries yet, use the defaults
-        if (mShadowTextureConfigList.empty())
-        {
-            mShadowTextureConfigList.resize(count);
-        }
-        else 
-        {
-            // create new instances with the same settings as the last item in the list
-            mShadowTextureConfigList.resize(count, *mShadowTextureConfigList.rbegin());
-        }
-        mShadowTextureConfigDirty = true;
-    }
-}
-//---------------------------------------------------------------------
-void SceneManager::setShadowTexturePixelFormat(PixelFormat fmt)
-{
-    for (ShadowTextureConfigList::iterator i = mShadowTextureConfigList.begin();
-        i != mShadowTextureConfigList.end(); ++i)
-    {
-        if (i->format != fmt)
-        {
-            i->format = fmt;
-            mShadowTextureConfigDirty = true;
-        }
-    }
-}
-void SceneManager::setShadowTextureFSAA(unsigned short fsaa)
-{
-    for (ShadowTextureConfigList::iterator i = mShadowTextureConfigList.begin();
-                i != mShadowTextureConfigList.end(); ++i)
-    {
-        if (i->fsaa != fsaa)
-        {
-            i->fsaa = fsaa;
-            mShadowTextureConfigDirty = true;
-        }
-    }
-}
-//---------------------------------------------------------------------
-void SceneManager::setShadowTextureSettings(unsigned short size, 
-    unsigned short count, PixelFormat fmt, unsigned short fsaa, uint16 depthBufferPoolId)
-{
-    setShadowTextureCount(count);
-    for (ShadowTextureConfigList::iterator i = mShadowTextureConfigList.begin();
-        i != mShadowTextureConfigList.end(); ++i)
-    {
-        if (i->width != size || i->height != size || i->format != fmt || i->fsaa != fsaa)
-        {
-            i->width = i->height = size;
-            i->format = fmt;
-            i->fsaa = fsaa;
-            i->depthBufferPoolId = depthBufferPoolId;
-            mShadowTextureConfigDirty = true;
-        }
-    }
-}
-//---------------------------------------------------------------------
-const TexturePtr& SceneManager::getShadowTexture(size_t shadowIndex)
-{
-    if (shadowIndex >= mShadowTextureConfigList.size())
-    {
-        OGRE_EXCEPT(Exception::ERR_ITEM_NOT_FOUND, 
-            "shadowIndex out of bounds",
-            "SceneManager::getShadowTexture");
-    }
-    mShadowRenderer.ensureShadowTexturesCreated();
-
-    return mShadowRenderer.mShadowTextures[shadowIndex];
-
+        mShadowRenderer.mShadowTextureConfigList.begin(), mShadowRenderer.mShadowTextureConfigList.end());
 
 }
 //---------------------------------------------------------------------
 void SceneManager::setShadowTextureSelfShadow(bool selfShadow) 
 { 
-    mShadowTextureSelfShadow = selfShadow;
+    mShadowRenderer.mShadowTextureSelfShadow = selfShadow;
     if (isShadowTechniqueTextureBased())
         getRenderQueue()->setShadowCastersCannotBeReceivers(!selfShadow);
 }
@@ -3737,7 +3257,25 @@ void SceneManager::destroyShadowTextures(void)
 }
 void SceneManager::prepareShadowTextures(Camera* cam, Viewport* vp, const LightList* lightList)
 {
-    mShadowRenderer.prepareShadowTextures(cam, vp, lightList);
+        // Set the illumination stage, prevents recursive calls
+    IlluminationRenderStage savedStage = mIlluminationStage;
+    mIlluminationStage = IRS_RENDER_TO_TEXTURE;
+
+    if (lightList == 0)
+        lightList = &mLightsAffectingFrustum;
+
+    try
+    {
+        mShadowRenderer.prepareShadowTextures(cam, vp, lightList);
+    }
+    catch (Exception&)
+    {
+        // we must reset the illumination stage if an exception occurs
+        mIlluminationStage = savedStage;
+        throw;
+    }
+
+    mIlluminationStage = savedStage;
 }
 //---------------------------------------------------------------------
 SceneManager::RenderContext* SceneManager::_pauseRendering()
@@ -3782,20 +3320,8 @@ void SceneManager::_resumeRendering(SceneManager::RenderContext* context)
 
     // Set rasterisation mode
     mDestRenderSystem->_setPolygonMode(mCameraInProgress->getPolygonMode());
-
-    // Set initial camera state
-    mDestRenderSystem->_setProjectionMatrix(mCameraInProgress->getProjectionMatrixRS());
     
-    mCachedViewMatrix = mCameraInProgress->getViewMatrix(true);
-
-    if (mCameraRelativeRendering)
-    {
-        mCachedViewMatrix.setTrans(Vector3::ZERO);
-    }
     mDestRenderSystem->_setTextureProjectionRelativeTo(mCameraRelativeRendering, mCameraInProgress->getDerivedPosition());
-
-    
-    setViewMatrix(mCachedViewMatrix);
     delete context;
 }
 //---------------------------------------------------------------------
@@ -4260,6 +3786,12 @@ bool SceneManager::hasMovableObject(const String& name, const String& typeName) 
 }
 
 //---------------------------------------------------------------------
+const SceneManager::MovableObjectMap&
+SceneManager::getMovableObjects(const String& typeName)
+{
+    MovableObjectCollection* objectMap = getMovableObjectCollection(typeName);
+    return objectMap->map;
+}
 SceneManager::MovableObjectIterator 
 SceneManager::getMovableObjectIterator(const String& typeName)
 {
@@ -4445,37 +3977,22 @@ void SceneManager::_handleLodEvents()
     mEntityMaterialLodChangedEvents.clear();
 }
 //---------------------------------------------------------------------
-void SceneManager::setViewMatrix(const Affine3& m)
+void SceneManager::useLights(const LightList* lights, ushort limit)
 {
-    mDestRenderSystem->_setViewMatrix(m);
-    if (mDestRenderSystem->areFixedFunctionLightsInViewSpace())
-    {
-        // reset light hash if we've got lights already set
-        if(mLastLightHash)
-            mLastLightHash = 0;
-    }
-}
-//---------------------------------------------------------------------
-void SceneManager::useLights(const LightList& lights, ushort limit, bool fixedFunction)
-{
-    bool updateGpu = lights.getHash() != mLastLightHash;
-    bool updateFF = fixedFunction && (updateGpu || limit != mLastLightLimit);
+    static LightList NULL_LIGHTS;
+    lights = lights ? lights : &NULL_LIGHTS;
 
-    if(updateGpu)
+    if(lights->getHash() != mLastLightHash)
     {
-        mLastLightHash = lights.getHash();
+        mLastLightHash = lights->getHash();
 
         // Update any automatic gpu params for lights
         // Other bits of information will have to be looked up
-        mAutoParamDataSource->setCurrentLightList(&lights);
+        mAutoParamDataSource->setCurrentLightList(lights);
         mGpuParamsDirty |= GPV_LIGHTS;
     }
 
-    if (updateFF)
-    {
-        mDestRenderSystem->_useLights(lights, limit);
-        mLastLightLimit = limit;
-    }
+    mDestRenderSystem->_useLights(std::min<ushort>(limit, lights->size()));
 }
 //---------------------------------------------------------------------
 void SceneManager::bindGpuProgram(GpuProgram* prog)
@@ -4495,14 +4012,12 @@ void SceneManager::_markGpuParamsDirty(uint16 mask)
 //---------------------------------------------------------------------
 void SceneManager::updateGpuProgramParameters(const Pass* pass)
 {
+    if (!mGpuParamsDirty)
+        return;
+
     if (pass->isProgrammable())
     {
-
-        if (!mGpuParamsDirty)
-            return;
-
-        if (mGpuParamsDirty)
-            pass->_updateAutoParams(mAutoParamDataSource.get(), mGpuParamsDirty);
+        pass->_updateAutoParams(mAutoParamDataSource.get(), mGpuParamsDirty);
 
         for (int i = 0; i < GPT_COUNT; i++)
         {
@@ -4513,20 +4028,26 @@ void SceneManager::updateGpuProgramParameters(const Pass* pass)
                                                             mGpuParamsDirty);
             }
         }
-
-        mGpuParamsDirty = 0;
     }
 
+    // GLSL and HLSL2 allow FFP state access
+    if(mFixedFunctionParams)
+    {
+        mFixedFunctionParams->_updateAutoParams(mAutoParamDataSource.get(), mGpuParamsDirty);
+        mDestRenderSystem->applyFixedFunctionParams(mFixedFunctionParams, mGpuParamsDirty);
+    }
+
+    mGpuParamsDirty = 0;
 }
 //---------------------------------------------------------------------
 void SceneManager::_issueRenderOp(Renderable* rend, const Pass* pass)
 {
+    // Finalise GPU parameter bindings
+    if(pass)
+        updateGpuProgramParameters(pass);
+
     if(rend->preRender(this, mDestRenderSystem))
     {
-        // Finalise GPU parameter bindings
-        if(pass)
-            updateGpuProgramParameters(pass);
-        
         RenderOperation ro;
         ro.srcRenderable = rend;
 

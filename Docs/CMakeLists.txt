@@ -16,7 +16,7 @@
 if (WIN32 OR APPLE)
   set(OGRE_DOCS_PATH "Docs")
 elseif (UNIX)
-  set(OGRE_DOCS_PATH "share/OGRE/docs")
+  set(OGRE_DOCS_PATH "share/doc/OGRE")
 endif ()
 
 # Build and install API documentation if doxygen is available
@@ -46,7 +46,6 @@ if(DOXYGEN_FOUND)
         ${PROJECT_SOURCE_DIR}/Docs/src/high-level-programs.md
         ${PROJECT_SOURCE_DIR}/Docs/src/particle-scripts.md
         ${PROJECT_SOURCE_DIR}/Docs/src/hardware-buffers.md
-        ${PROJECT_SOURCE_DIR}/Docs/src/hlms.md
         ${PROJECT_SOURCE_DIR}/Docs/src/rtss.md
         ${PROJECT_SOURCE_DIR}/Docs/src/resourcemanagement.md
         ${PROJECT_SOURCE_DIR}/BuildingOgre.md

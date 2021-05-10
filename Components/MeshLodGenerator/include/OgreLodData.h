@@ -32,8 +32,10 @@
 #include "OgreLodPrerequisites.h"
 #include "OgreVectorSet.h"
 #include "OgreVectorSetImpl.h"
-#include "OgreVector3.h"
+#include "OgreVector.h"
 #include "OgreHeaderPrefix.h"
+
+#include <unordered_set>
 
 #ifndef MESHLOD_QUALITY
 /// MESHLOD_QUALITY=1 is fastest processing time.

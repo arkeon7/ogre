@@ -36,27 +36,25 @@ THE SOFTWARE.
 #include "OgreMatrix4.h"
 
 #include <functional>
+#include <sstream>
 
 /** \addtogroup Optional
 *  @{
 */
 /** \defgroup Property Property
 * Associate values of arbitrary type with names
-*  @{
-*/
 
-/** @file
     OGRE's property system allows you to associate values of arbitrary type with
     names, and have those values exposed via a self-describing interface. Unlike
     Ogre::StringInterface, the values are passed as their native types without
     needing conversion to or from strings; they are simply wrapped in an Ogre::Any
     and casts are performed to access them.
-    @par
+
     Property values are actually not stored in this system; instead the property
     definitions reference getter & setter methods which provide the 'backing' for
     the property. This means you can directly expose features of your classes as properties
     without any duplication.
-    @par
+
     There are two aspects to exposing a property on your class. One is exposing 
     the definition of the property (PropertyDef), which should be shared between 
     all instances and probably stored in a static PropertyDefMap somewhere. The second
@@ -64,7 +62,7 @@ THE SOFTWARE.
     a method on this particular instance of the class; this is formed by a number of
     Property instances, contained in a PropertySet. Each Property has an explicit
     binding to getter and setter instance methods.
-    @par
+
     So, here's an example of setting up properties on an instance:
 
     @code
@@ -73,9 +71,9 @@ THE SOFTWARE.
     PropertyDefMap::iterator defi = propertyDefs.find("name");
     if (defi == propertyDefs.end())
     {
-        defi = propertyDefs.insert(PropertyDefMap::value_type("name", 
+        defi = propertyDefs.emplace("name",
             PropertyDef("name", 
-                "The name of the object.", PROP_STRING))).first;
+                "The name of the object.", PROP_STRING)).first;
     }
     // This has established the property definition, and its description.
     // Now, we need to 'wire' a property instance for this object instance
@@ -90,7 +88,6 @@ THE SOFTWARE.
 
 */
 
-/** @} */
 /** @} */
 namespace Ogre
 {

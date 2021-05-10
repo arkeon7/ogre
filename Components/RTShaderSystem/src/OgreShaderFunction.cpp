@@ -34,11 +34,12 @@ static GpuConstantType typeFromContent(Parameter::Content content)
 {
     switch (content)
     {
+    case Parameter::SPC_BLEND_INDICES:
+        return GCT_UINT4;
     case Parameter::SPC_COLOR_DIFFUSE:
     case Parameter::SPC_COLOR_SPECULAR:
     case Parameter::SPC_POSITION_PROJECTIVE_SPACE:
     case Parameter::SPC_POSITION_OBJECT_SPACE:
-    case Parameter::SPC_BLEND_INDICES:
     case Parameter::SPC_BLEND_WEIGHTS:
     case Parameter::SPC_POSITION_LIGHT_SPACE0:
     case Parameter::SPC_POSITION_LIGHT_SPACE1:
@@ -56,6 +57,7 @@ static GpuConstantType typeFromContent(Parameter::Content content)
     case Parameter::SPC_TANGENT_OBJECT_SPACE:
     case Parameter::SPC_POSTOCAMERA_TANGENT_SPACE:
     case Parameter::SPC_POSTOCAMERA_OBJECT_SPACE:
+    case Parameter::SPC_POSTOCAMERA_VIEW_SPACE:
     case Parameter::SPC_POSITION_VIEW_SPACE:
     case Parameter::SPC_POSITION_WORLD_SPACE:
     case Parameter::SPC_LIGHTDIRECTION_OBJECT_SPACE0:
@@ -90,6 +92,7 @@ static GpuConstantType typeFromContent(Parameter::Content content)
     case Parameter::SPC_POSTOLIGHT_TANGENT_SPACE5:
     case Parameter::SPC_POSTOLIGHT_TANGENT_SPACE6:
     case Parameter::SPC_POSTOLIGHT_TANGENT_SPACE7:
+    case Parameter::SPC_LIGHTDIRECTION_VIEW_SPACE0:
         return GCT_FLOAT3;
     case Parameter::SPC_POINTSPRITE_COORDINATE:
         return GCT_FLOAT2;
@@ -119,6 +122,8 @@ static Parameter::Semantic semanticFromContent(Parameter::Content content, bool 
         return Parameter::SPS_TANGENT;
     case Parameter::SPC_POINTSPRITE_COORDINATE:
         return Parameter::SPS_TEXTURE_COORDINATES;
+    case Parameter::SPC_BINORMAL_OBJECT_SPACE:
+        return Parameter::SPS_BINORMAL;
     case Parameter::SPC_POSITION_OBJECT_SPACE:
         if(!isVSOut) return Parameter::SPS_POSITION;
         OGRE_FALLTHROUGH;
@@ -169,12 +174,18 @@ void FunctionStageRef::assign(const std::vector<Operand>& params) const
     mParent->addAtomInstance(function);
 }
 
+void FunctionStageRef::binaryOp(char op, const std::vector<Operand>& params) const
+{
+    auto function = new BinaryOpAtom(op, mStage);
+    function->setOperands(params);
+    mParent->addAtomInstance(function);
+}
+
 //-----------------------------------------------------------------------------
-Function::Function(const String& name, const String& desc, const FunctionType functionType)
+Function::Function(const String& name, const String& desc)
 {
     mName           = name;
     mDescription    = desc;
-    mFunctionType   = functionType;
 }
 
 //-----------------------------------------------------------------------------
@@ -201,6 +212,42 @@ Function::~Function()
         (*it).reset();
     mLocalParameters.clear();
 
+}
+
+static String getParameterName(const char* prefix, Parameter::Semantic semantic, int index)
+{
+    const char* name = "";
+    switch (semantic)
+    {
+    case Parameter::SPS_POSITION:
+        name = "Pos";
+        break;
+    case Parameter::SPS_BLEND_WEIGHTS:
+        name = "BlendWeights";
+        break;
+    case Parameter::SPS_BLEND_INDICES:
+        name = "BlendIndices";
+        break;
+    case Parameter::SPS_NORMAL:
+        name = "Normal";
+        break;
+    case Parameter::SPS_COLOR:
+        name = "Color";
+        break;
+    case Parameter::SPS_TEXTURE_COORDINATES:
+        name = "Texcoord";
+        break;
+    case Parameter::SPS_BINORMAL:
+        name = "BiNormal";
+        break;
+    case Parameter::SPS_TANGENT:
+        name = "Tangent";
+        break;
+    case Parameter::SPS_UNKNOWN:
+        name = "Param";
+        break;
+    };
+    return StringUtil::format("%s%s_%d", prefix, name, index);
 }
 
 //-----------------------------------------------------------------------------
@@ -251,64 +298,18 @@ ParameterPtr Function::resolveInputParameter(Parameter::Semantic semantic,
             {
                 return param;
             }
-            else 
-            {
-                OGRE_EXCEPT(Exception::ERR_INVALIDPARAMS, 
-                    "Can not resolve parameter - semantic: " + StringConverter::toString(semantic) + " - index: " + StringConverter::toString(index) + " due to type mismatch. Function <" + getName() + ">",           
-                    "Function::resolveInputParameter" );
-            }
+            OGRE_EXCEPT(Exception::ERR_INVALIDPARAMS,
+                        StringUtil::format("Can not resolve parameter due to type mismatch: semantic: %d, index: %d",
+                            semantic, index));
         }
     }
 
     
-
     // No parameter found -> create new one.
-    switch (semantic)
-    {
-    case Parameter::SPS_POSITION:   
-        assert(type == GCT_FLOAT4);
-        param = ParameterFactory::createInPosition(index);
-        break;
-            
-    case Parameter::SPS_BLEND_WEIGHTS:          
-        assert(type == GCT_FLOAT4);
-        param = ParameterFactory::createInWeights(index);
-        break;
-            
-    case Parameter::SPS_BLEND_INDICES:
-		assert(type == GCT_FLOAT4);
-        param = ParameterFactory::createInIndices(index);
-        break;
-            
-    case Parameter::SPS_NORMAL:
-        assert(type == GCT_FLOAT3);
-        param = ParameterFactory::createInNormal(index);
-        break;
-            
-    case Parameter::SPS_COLOR:
-        assert(type == GCT_FLOAT4);
-        param = ParameterFactory::createInColor(index);
-        break;
-                        
-    case Parameter::SPS_TEXTURE_COORDINATES:        
-        param = ParameterFactory::createInTexcoord(type, index, content);               
-        break;
-            
-    case Parameter::SPS_BINORMAL:
-        assert(type == GCT_FLOAT3);
-        param = ParameterFactory::createInBiNormal(index);
-        break;
-            
-    case Parameter::SPS_TANGENT:
-        assert(type == GCT_FLOAT3);
-        param = ParameterFactory::createInTangent(index);
-        break;
-    case Parameter::SPS_UNKNOWN:
-        break;
-    }
-
-    if (param.get() != NULL)
-        addInputParameter(param);
+    OgreAssert(semantic != Parameter::SPS_UNKNOWN, "unknown semantic");
+    param =
+        std::make_shared<Parameter>(type, getParameterName("i", semantic, index), semantic, index, content);
+    addInputParameter(param);
 
     return param;
 }
@@ -361,12 +362,9 @@ ParameterPtr Function::resolveOutputParameter(Parameter::Semantic semantic,
             {
                 return param;
             }
-            else 
-            {
-                OGRE_EXCEPT(Exception::ERR_INVALIDPARAMS, 
-                    "Can not resolve parameter - semantic: " + StringConverter::toString(semantic) + " - index: " + StringConverter::toString(index) + " due to type mismatch. Function <" + getName() + ">",           
-                    "Function::resolveOutputParameter" );
-            }
+            OGRE_EXCEPT(Exception::ERR_INVALIDPARAMS,
+                        StringUtil::format("Can not resolve parameter due to type mismatch: semantic: %d, index: %d",
+                            semantic, index));
         }
     }
     
@@ -374,47 +372,20 @@ ParameterPtr Function::resolveOutputParameter(Parameter::Semantic semantic,
     // No parameter found -> create new one.
     switch (semantic)
     {
-    case Parameter::SPS_POSITION:   
-        assert(type == GCT_FLOAT4);
-        param = ParameterFactory::createOutPosition(index);
-        break;
-
-    case Parameter::SPS_BLEND_WEIGHTS:      
-    case Parameter::SPS_BLEND_INDICES:
-        OGRE_EXCEPT(Exception::ERR_INVALIDPARAMS, 
-            "Can not resolve parameter - semantic: " + StringConverter::toString(semantic) + " - index: " + StringConverter::toString(index) + " since support in it is not implemented yet. Function <" + getName() + ">",             
-            "Function::resolveOutputParameter" );
-        break;
-
-    case Parameter::SPS_NORMAL:
-        assert(type == GCT_FLOAT3);
-        param = ParameterFactory::createOutNormal(index);
-        break;
-
+    case Parameter::SPS_TEXTURE_COORDINATES:
     case Parameter::SPS_COLOR:
-        assert(type == GCT_FLOAT4);
-        param = ParameterFactory::createOutColor(index);
+    case Parameter::SPS_POSITION:
+        param = std::make_shared<Parameter>(type, getParameterName("o", semantic, index), semantic, index,
+                                            content);
         break;
 
-    case Parameter::SPS_TEXTURE_COORDINATES:        
-        param = ParameterFactory::createOutTexcoord(type, index, content);              
-        break;
-
-    case Parameter::SPS_BINORMAL:
-        assert(type == GCT_FLOAT3);
-        param = ParameterFactory::createOutBiNormal(index);
-        break;
-
-    case Parameter::SPS_TANGENT:
-        assert(type == GCT_FLOAT3);
-        param = ParameterFactory::createOutTangent(index);
-        break;
-    case Parameter::SPS_UNKNOWN:
+    default:
+        OGRE_EXCEPT(Exception::ERR_INVALIDPARAMS,
+                    StringUtil::format("Semantic not supported as output parameter: %d", semantic));
         break;
     }
 
-    if (param.get() != NULL)
-        addOutputParameter(param);
+    addOutputParameter(param);
 
     return param;
 }
@@ -462,7 +433,9 @@ ParameterPtr Function::resolveLocalParameter(Parameter::Semantic semantic, int i
     if (param.get() != NULL)    
         return param;
 
-    param = ParameterPtr(OGRE_NEW Parameter(type, "lLocalParam_" + StringConverter::toString(mLocalParameters.size()), semantic, index, content));
+    param = std::make_shared<Parameter>(
+        type, getParameterName("l", semanticFromContent(content), mLocalParameters.size()), semantic, index,
+        content);
     addParameter(mLocalParameters, param);
 
     return param;
@@ -476,7 +449,7 @@ void Function::addInputParameter(ParameterPtr parameter)
     if (_getParameterBySemantic(mInputParameters, parameter->getSemantic(), parameter->getIndex()).get() != NULL)
     {
         OGRE_EXCEPT( Exception::ERR_INVALIDPARAMS, 
-            "Parameter <" + parameter->getName() + "> has equal sematic parameter in function <" + getName() + ">",             
+            "Parameter <" + parameter->getName() + "> has equal semantic parameter in function <" + getName() + ">",
             "Function::addInputParameter" );
     }
 
@@ -490,7 +463,7 @@ void Function::addOutputParameter(ParameterPtr parameter)
     if (_getParameterBySemantic(mOutputParameters, parameter->getSemantic(), parameter->getIndex()).get() != NULL)
     {
         OGRE_EXCEPT( Exception::ERR_INVALIDPARAMS, 
-            "Parameter <" + parameter->getName() + "> has equal sematic parameter in function <" + getName() + ">",             
+            "Parameter <" + parameter->getName() + "> has equal semantic parameter in function <" + getName() + ">",
             "Function::addOutputParameter" );
     }
 
@@ -629,12 +602,6 @@ void Function::addAtomInstance(FunctionAtom* atomInstance)
 }
 
 //-----------------------------------------------------------------------------
-void Function::addAtomAssign(ParameterPtr lhs, ParameterPtr rhs, int groupOrder)
-{
-    addAtomInstance(OGRE_NEW AssignmentAtom(lhs, rhs, groupOrder));
-}
-
-//-----------------------------------------------------------------------------
 bool Function::deleteAtomInstance(FunctionAtom* atomInstance)
 {
     FunctionAtomInstanceIterator it;
@@ -669,12 +636,6 @@ const FunctionAtomInstanceList& Function::getAtomInstances()
     }
 
     return mSortedAtomInstances;
-}
-
-//-----------------------------------------------------------------------------
-Ogre::RTShader::Function::FunctionType Function::getFunctionType() const
-{
-    return mFunctionType;
 }
 
 }

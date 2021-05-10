@@ -31,10 +31,12 @@ THE SOFTWARE.
 #include "OgrePrerequisites.h"
 #include "OgreCommon.h"
 #include "OgreHardwareVertexBuffer.h"
-#include "OgreIteratorWrappers.h"
 #include "OgreHeaderPrefix.h"
 
 namespace Ogre {
+
+    template <typename T> class MapIterator;
+    template <typename T> class ConstMapIterator;
 
     /** \addtogroup Core
     *  @{
@@ -88,6 +90,7 @@ namespace Ogre {
         /** Adds an offset to a vertex and a new normal for this pose. 
         @param index The vertex index
         @param offset The position offset for this pose
+        @param normal The new vertex normal
         */
         void addVertex(size_t index, const Vector3& offset, const Vector3& normal);
 
@@ -97,19 +100,31 @@ namespace Ogre {
         /** Clear all vertices. */
         void clearVertices(void);
 
-        /** Gets an iterator over all the vertex offsets. */
-        ConstVertexOffsetIterator getVertexOffsetIterator(void) const;
-        /** Gets an iterator over all the vertex offsets. */
-        VertexOffsetIterator getVertexOffsetIterator(void);
+        /// @deprecated use getVertexOffsets
+        OGRE_DEPRECATED ConstVertexOffsetIterator getVertexOffsetIterator(void) const;
+        /// @deprecated use getVertexOffsets
+        OGRE_DEPRECATED VertexOffsetIterator getVertexOffsetIterator(void);
         /** Gets a const reference to the vertex offsets. */
         const VertexOffsetMap& getVertexOffsets(void) const { return mVertexOffsetMap; }
 
-        /** Gets an iterator over all the vertex offsets. */
-        ConstNormalsIterator getNormalsIterator(void) const;
-        /** Gets an iterator over all the vertex offsets. */
-        NormalsIterator getNormalsIterator(void);
-        /** Gets a const reference to the vertex offsets. */
+        /// @deprecated use getNormals
+        OGRE_DEPRECATED ConstNormalsIterator getNormalsIterator(void) const;
+        /// @deprecated use getNormals
+        OGRE_DEPRECATED NormalsIterator getNormalsIterator(void);
+        /** Gets a const reference to the vertex normals */
         const NormalsMap& getNormals(void) const { return mNormalsMap; }
+
+        /** writable access to the vertex offsets for offline processing
+         *
+         * @attention does not invalidate the vertexbuffer
+         */
+        VertexOffsetMap& _getVertexOffsets() { return mVertexOffsetMap; }
+
+        /** writable access to the vertex normals for offline processing
+         *
+         * @attention does not invalidate the vertexbuffer
+         */
+        NormalsMap& _getNormals() { return mNormalsMap; }
 
         /** Get a hardware vertex buffer version of the vertex offsets. */
         const HardwareVertexBufferSharedPtr& _getHardwareVertexBuffer(const VertexData* origData) const;
@@ -118,7 +133,7 @@ namespace Ogre {
             way (only really useful for cloning holders of this class).
         */
         Pose* clone(void) const OGRE_NODISCARD;
-    protected:
+    private:
         /// Target geometry index
         ushort mTarget;
         /// Optional name

@@ -33,7 +33,7 @@ THE SOFTWARE.
 #include "OgreRenderSystem.h"
 #include "OgreGLHardwareBufferManager.h"
 #include "OgreGLGpuProgramManager.h"
-#include "OgreVector4.h"
+#include "OgreVector.h"
 
 #include "OgreGLRenderSystemCommon.h"
 #include "OgreGLStateCacheManager.h"
@@ -63,6 +63,36 @@ namespace Ogre {
                                          public SceneManager::Listener
     {
     private:
+
+        /// View matrix to set world against
+        Matrix4 mViewMatrix;
+        Matrix4 mWorldMatrix;
+        Matrix4 mTextureMatrix;
+
+        /// Last min & mip filtering options, so we can combine them
+        FilterOptions mMinFilter;
+        FilterOptions mMipFilter;
+
+        /// What texture coord set each texture unit is using
+        size_t mTextureCoordIndex[OGRE_MAX_TEXTURE_LAYERS];
+
+        /// Holds texture type settings for every stage
+        GLenum mTextureTypes[OGRE_MAX_TEXTURE_LAYERS];
+
+        /// Number of fixed-function texture units
+        unsigned short mFixedFunctionTextureUnits;
+
+        void setGLLight(size_t index, bool lt);
+        void makeGLMatrix(GLfloat gl_matrix[16], const Matrix4& m);
+ 
+        GLint getBlendMode(SceneBlendFactor ogreBlend) const;
+        GLint getTextureAddressingMode(TextureAddressingMode tam) const;
+                void initialiseContext(RenderWindow* primary);
+
+        /// Store last stencil mask state
+        uint32 mStencilWriteMask;
+        /// Store last depth write state
+        bool mDepthWrite;
         /// Rendering loop control
         bool mStopRendering;
 
@@ -90,56 +120,9 @@ namespace Ogre {
         typedef std::set<SceneManager*> SceneManagerList;
         SceneManagerList mRegisteredQuadBufferSceneManagers;
 
-        /** Array of up to 8 lights, indexed as per API
-            Note that a null value indicates a free slot
-          */ 
-        #define MAX_LIGHTS 8
-        Light* mLights[MAX_LIGHTS];
-
-        /// View matrix to set world against
-        Matrix4 mViewMatrix;
-        Matrix4 mWorldMatrix;
-        Matrix4 mTextureMatrix;
-
-        /// Last min & mip filtering options, so we can combine them
-        FilterOptions mMinFilter;
-        FilterOptions mMipFilter;
-
-        /// What texture coord set each texture unit is using
-        size_t mTextureCoordIndex[OGRE_MAX_TEXTURE_LAYERS];
-
-        /// Holds texture type settings for every stage
-        GLenum mTextureTypes[OGRE_MAX_TEXTURE_LAYERS];
-
-        /// Number of fixed-function texture units
-        unsigned short mFixedFunctionTextureUnits;
-
-        void setGLLight(size_t index, Light* lt);
-        void makeGLMatrix(GLfloat gl_matrix[16], const Matrix4& m);
- 
-        GLint getBlendMode(SceneBlendFactor ogreBlend) const;
-        GLint getTextureAddressingMode(TextureAddressingMode tam) const;
-                void initialiseContext(RenderWindow* primary);
-
-        void setLights();
-
-        /// Store last colour write state
-        bool mColourWrite[4];
-        /// Store last stencil mask state
-        uint32 mStencilWriteMask;
-        /// Store last depth write state
-        bool mDepthWrite;
-        /// Store last scissor enable state
-        bool mScissorsEnabled;
-
-        /// Store scissor box
-        int mScissorBox[4];
 
         GLint convertCompareFunction(CompareFunction func) const;
         GLint convertStencilOp(StencilOperation op, bool invert = false) const;
-
-        /// Internal method to set pos / direction of a light
-        void setGLLightPositionDirection(Light* lt, GLenum lightindex);
 
         bool mUseAutoTextureMatrix;
         GLfloat mAutoTextureMatrix[16];
@@ -153,23 +136,12 @@ namespace Ogre {
 
         unsigned short mCurrentLights;
 
-        GLGpuProgram* mCurrentVertexProgram;
-        GLGpuProgram* mCurrentFragmentProgram;
-        GLGpuProgram* mCurrentGeometryProgram;
-
-        typedef std::list<GLContext*> GLContextList;
-        /// List of background thread contexts
-        GLContextList mBackgroundContextList;
+        GLGpuProgramBase* mCurrentVertexProgram;
+        GLGpuProgramBase* mCurrentFragmentProgram;
+        GLGpuProgramBase* mCurrentGeometryProgram;
 
         // statecaches are per context
         GLStateCacheManager* mStateCacheManager;
-
-        /** Manager object for creating render textures.
-            Direct render to texture via GL_EXT_framebuffer_object is preferable 
-            to pbuffers, which depend on the GL support used and are generally 
-            unwieldy and slow. However, FBO support for stencil buffers is poor.
-        */
-        GLRTTManager *mRTTManager;
 
         ushort mActiveTextureUnit;
         ushort mMaxBuiltInTextureAttribIndex;
@@ -178,6 +150,9 @@ namespace Ogre {
         // (save allocations)
         std::vector<GLuint> mRenderAttribsBound;
         std::vector<GLuint> mRenderInstanceAttribsBound;
+
+        /// is fixed pipeline enabled
+        bool mEnableFixedPipeline;
 
 #if OGRE_NO_QUAD_BUFFER_STEREO == 0
 		/// @copydoc RenderSystem::setDrawBuffer
@@ -203,17 +178,21 @@ namespace Ogre {
         // Overridden RenderSystem functions
         // ----------------------------------
 
+        const GpuProgramParametersPtr& getFixedFunctionParams(TrackVertexColourType tracking, FogMode fog);
+
+        void applyFixedFunctionParams(const GpuProgramParametersPtr& params, uint16 variabilityMask);
+
         const String& getName(void) const;
 
-        RenderWindow* _initialise(bool autoCreateWindow, const String& windowTitle = "OGRE Render Window");
+        void _initialise() override;
+
+        void initConfigOptions() override;
 
         virtual RenderSystemCapabilities* createRenderSystemCapabilities() const;
 
         void initialiseFromRenderSystemCapabilities(RenderSystemCapabilities* caps, RenderTarget* primary);
 
         void shutdown(void);
-
-        void setAmbientLight(float r, float g, float b);
 
         void setShadingType(ShadeOptions so);
 
@@ -223,16 +202,8 @@ namespace Ogre {
         RenderWindow* _createRenderWindow(const String &name, unsigned int width, unsigned int height, 
                                           bool fullScreen, const NameValuePairList *miscParams = 0);
 
-        /// @copydoc RenderSystem::_createRenderWindows
-        bool _createRenderWindows(const RenderWindowDescriptionList& renderWindowDescriptions, 
-                                  RenderWindowList& createdWindows);
-
         /// @copydoc RenderSystem::_createDepthBufferFor
         DepthBuffer* _createDepthBufferFor( RenderTarget *renderTarget );
-
-        /// Mimics D3D9RenderSystem::_getDepthStencilFormatFor, if no FBO RTT manager, outputs GL_NONE
-        void _getDepthStencilFormatFor( PixelFormat internalColourFormat, GLenum *depthFormat,
-                                        GLenum *stencilFormat );
         
         /// @copydoc RenderSystem::createMultiRenderTarget
         virtual MultiRenderTarget * createMultiRenderTarget(const String & name); 
@@ -246,23 +217,17 @@ namespace Ogre {
         // Low-level overridden members
         // -----------------------------
 
-        void _useLights(const LightList& lights, unsigned short limit);
+        void _useLights(unsigned short limit);
 
-        bool areFixedFunctionLightsInViewSpace() const { return true; }
+        void setWorldMatrix(const Matrix4 &m);
 
-        void _setWorldMatrix(const Matrix4 &m);
+        void setViewMatrix(const Matrix4 &m);
 
-        void _setViewMatrix(const Matrix4 &m);
+        void setProjectionMatrix(const Matrix4 &m);
 
-        void _setProjectionMatrix(const Matrix4 &m);
+        void _setSurfaceTracking(TrackVertexColourType tracking);
 
-        void _setSurfaceParams(const ColourValue &ambient,
-            const ColourValue &diffuse, const ColourValue &specular,
-            const ColourValue &emissive, Real shininess,
-            TrackVertexColourType tracking);
-
-        void _setPointParameters(Real size, bool attenuationEnabled, 
-            Real constant, Real linear, Real quadratic, Real minSize, Real maxSize);
+        void _setPointParameters(bool attenuationEnabled, Real minSize, Real maxSize);
 
         void _setLineWidth(float width);
 
@@ -281,19 +246,11 @@ namespace Ogre {
 
         void _setTextureAddressingMode(size_t stage, const Sampler::UVWAddressingMode& uvw);
 
-        void _setTextureBorderColour(size_t stage, const ColourValue& colour);
-
-        void _setTextureMipmapBias(size_t unit, float bias);
-
         void _setTextureMatrix(size_t stage, const Matrix4& xform);
-
-        void _setSeparateSceneBlending(SceneBlendFactor sourceFactor, SceneBlendFactor destFactor, SceneBlendFactor sourceFactorAlpha, SceneBlendFactor destFactorAlpha, SceneBlendOperation op, SceneBlendOperation alphaOp );
 
         void _setAlphaRejectSettings(CompareFunction func, unsigned char value, bool alphaToCoverage);
 
         void _setViewport(Viewport *vp);
-
-        void _beginFrame(void);
 
         void _endFrame(void);
 
@@ -309,9 +266,9 @@ namespace Ogre {
 
         void _setDepthBias(float constantBias, float slopeScaleBias);
 
-        void _setColourBufferWriteEnabled(bool red, bool green, bool blue, bool alpha);
+        void setColourBlendState(const ColourBlendState& state);
 
-        void _setFog(FogMode mode, const ColourValue& colour, Real density, Real start, Real end);
+        void _setFog(FogMode mode);
 
         void setClipPlane (ushort index, Real A, Real B, Real C, Real D);
 
@@ -333,12 +290,6 @@ namespace Ogre {
 
         void _setTextureUnitFiltering(size_t unit, FilterType ftype, FilterOptions filter);
 
-        void _setTextureUnitCompareFunction(size_t unit, CompareFunction function);
-
-        void _setTextureUnitCompareEnabled(size_t unit, bool compare);
-
-        void _setTextureLayerAnisotropy(size_t unit, unsigned int maxAnisotropy);
-
         void _render(const RenderOperation& op);
 
         void bindGpuProgram(GpuProgram* prg);
@@ -347,28 +298,16 @@ namespace Ogre {
 
         void bindGpuProgramParameters(GpuProgramType gptype, 
                                       const GpuProgramParametersPtr& params, uint16 variabilityMask);
-        /** See
-            RenderSystem
-        */
-        void bindGpuProgramPassIterationParameters(GpuProgramType gptype);
 
-        void setScissorTest(bool enabled, size_t left = 0, size_t top = 0, size_t right = 800, size_t bottom = 600) ;
+        void setScissorTest(bool enabled, const Rect& rect = Rect()) ;
         void clearFrameBuffer(unsigned int buffers, 
                               const ColourValue& colour = ColourValue::Black, 
                               Real depth = 1.0f, unsigned short stencil = 0);
         HardwareOcclusionQuery* createHardwareOcclusionQuery(void);
-        OGRE_MUTEX(mThreadInitMutex);
-        void registerThread();
-        void unregisterThread();
-        void preExtraThreadsStarted();
-        void postExtraThreadsStarted();
 
         // ----------------------------------
         // GLRenderSystem specific members
         // ----------------------------------
-        /** One time initialization for the RenderState of a context. Things that
-            only need to be set once, like the LightingModel can be defined here.
-         */
         void _oneTimeContextInitialization();
         /** Switch GL context, dealing with involved internal cached states too
         */
@@ -387,12 +326,6 @@ namespace Ogre {
         void _unregisterContext(GLContext *context);
 
         GLStateCacheManager * _getStateCacheManager() { return mStateCacheManager; }
-
-        /// @copydoc RenderSystem::getDisplayMonitorCount
-        unsigned int getDisplayMonitorCount() const;
-
-        /// @copydoc RenderSystem::hasAnisotropicMipMapFilter
-        virtual bool hasAnisotropicMipMapFilter() const { return false; }
         
         /// @copydoc RenderSystem::beginProfileEvent
         virtual void beginProfileEvent( const String &eventName );

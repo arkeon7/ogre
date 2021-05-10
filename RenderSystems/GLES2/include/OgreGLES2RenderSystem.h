@@ -44,8 +44,8 @@ namespace Ogre {
     * Implementation of GL ES 2.x as a rendering system.
     *  @{
     */
-    class GLRTTManager;
-    class GLES2GpuProgramManager;
+    class GLES2FBOManager;
+    class GpuProgramManager;
     class GLSLESProgramCommon;
     class GLSLESProgramFactory;
     class GLES2StateCacheManager;
@@ -73,23 +73,12 @@ namespace Ogre {
             /// State cache manager which responsible to reduce redundant state changes
             GLES2StateCacheManager* mStateCacheManager;
 
-            typedef std::list<GLContext*> GLContextList;
-            /// List of background thread contexts
-            GLContextList mBackgroundContextList;
-
-            GLES2GpuProgramManager *mGpuProgramManager;
+            GpuProgramManager *mGpuProgramManager;
             GLSLESProgramFactory* mGLSLESProgramFactory;
 #if !OGRE_NO_GLES2_CG_SUPPORT
             GLSLESCgProgramFactory* mGLSLESCgProgramFactory;
 #endif
             HardwareBufferManager* mHardwareBufferManager;
-
-            /** Manager object for creating render textures.
-                Direct render to texture via GL_OES_framebuffer_object is preferable 
-                to pbuffers, which depend on the GL support used and are generally 
-                unwieldy and slow. However, FBO support for stencil buffers is poor.
-              */
-            GLRTTManager *mRTTManager;
 
             /// Check if the GL system has already been initialised
             bool mGLInitialised;
@@ -117,16 +106,11 @@ namespace Ogre {
 
             // Mipmap count of the actual bounded texture
             size_t mCurTexMipCount;
-        
-            // Store scissor box
-            GLint mScissorBox[4];
 
         public:
             // Default constructor / destructor
             GLES2RenderSystem();
             virtual ~GLES2RenderSystem();
-        
-            friend class ShaderGeneratorTechniqueResolverListener;
 
             // ----------------------------------
             // Overridden RenderSystem functions
@@ -134,7 +118,7 @@ namespace Ogre {
 
             const String& getName(void) const;
 
-            RenderWindow* _initialise(bool autoCreateWindow, const String& windowTitle = "OGRE Render NativeWindowType");
+            void _initialise() override;
 
             virtual RenderSystemCapabilities* createRenderSystemCapabilities() const;
 
@@ -148,10 +132,6 @@ namespace Ogre {
 
             /// @copydoc RenderSystem::_createDepthBufferFor
             DepthBuffer* _createDepthBufferFor( RenderTarget *renderTarget );
-
-            /// Mimics D3D9RenderSystem::_getDepthStencilFormatFor, if no FBO RTT manager, outputs GL_NONE
-            void _getDepthStencilFormatFor( PixelFormat internalColourFormat, GLenum *depthFormat,
-                                            GLenum *stencilFormat );
 
             /// @copydoc RenderSystem::createMultiRenderTarget
             virtual MultiRenderTarget * createMultiRenderTarget(const String & name);
@@ -168,15 +148,9 @@ namespace Ogre {
 
             void _setTextureAddressingMode(size_t stage, const Sampler::UVWAddressingMode& uvw);
 
-            void _setTextureBorderColour(size_t stage, const ColourValue& colour) { };   // Not supported
-
-            void _setTextureMipmapBias(size_t unit, float bias) { };   // Not supported
-
             void _setLineWidth(float width);
 
             void _setViewport(Viewport *vp);
-
-            void _beginFrame(void);
 
             void _endFrame(void);
 
@@ -192,7 +166,7 @@ namespace Ogre {
 
             void _setDepthBias(float constantBias, float slopeScaleBias);
 
-            void _setColourBufferWriteEnabled(bool red, bool green, bool blue, bool alpha);
+            void setColourBlendState(const ColourBlendState& state);
 
             void _setPolygonMode(PolygonMode level);
 
@@ -206,32 +180,19 @@ namespace Ogre {
                     bool twoSidedOperation = false,
                     bool readBackAsTexture = false);
 
-            void _setTextureUnitCompareFunction(size_t unit, CompareFunction function);
-
-            void _setTextureUnitCompareEnabled(size_t unit, bool compare);          
-
             virtual void _setTextureUnitFiltering(size_t unit, FilterOptions minFilter,
                 FilterOptions magFilter, FilterOptions mipFilter);              
 
             void _setTextureUnitFiltering(size_t unit, FilterType ftype, FilterOptions filter);
 
-            void _setTextureLayerAnisotropy(size_t unit, unsigned int maxAnisotropy);
-
-            virtual bool hasAnisotropicMipMapFilter() const { return false; }   
-
             void _render(const RenderOperation& op);
 
-            void setScissorTest(bool enabled, size_t left = 0, size_t top = 0, size_t right = 800, size_t bottom = 600);
+            void setScissorTest(bool enabled, const Rect& rect = Rect());
 
             void clearFrameBuffer(unsigned int buffers,
                 const ColourValue& colour = ColourValue::Black,
                 Real depth = 1.0f, unsigned short stencil = 0);
             HardwareOcclusionQuery* createHardwareOcclusionQuery(void);
-            OGRE_MUTEX(mThreadInitMutex);
-            void registerThread();
-            void unregisterThread();
-            void preExtraThreadsStarted();
-            void postExtraThreadsStarted();
 
             // ----------------------------------
             // GLES2RenderSystem specific members
@@ -258,9 +219,6 @@ namespace Ogre {
             /** Switch GL context, dealing with involved internal cached states too
              */
             void _switchContext(GLContext *context);
-            /** One time initialization for the RenderState of a context. Things that
-             only need to be set once, like the LightingModel can be defined here.
-             */
             void _oneTimeContextInitialization();
             void initialiseContext(RenderWindow* primary);
             /**
@@ -274,14 +232,9 @@ namespace Ogre {
             void bindGpuProgram(GpuProgram* prg);
             void unbindGpuProgram(GpuProgramType gptype);
             void bindGpuProgramParameters(GpuProgramType gptype, const GpuProgramParametersPtr& params, uint16 mask);
-            void bindGpuProgramPassIterationParameters(GpuProgramType gptype);
 
-            /// @copydoc RenderSystem::_setSeparateSceneBlending
-            void _setSeparateSceneBlending( SceneBlendFactor sourceFactor, SceneBlendFactor destFactor, SceneBlendFactor sourceFactorAlpha, SceneBlendFactor destFactorAlpha, SceneBlendOperation op, SceneBlendOperation alphaOp );
             /// @copydoc RenderSystem::_setAlphaRejectSettings
             void _setAlphaRejectSettings( CompareFunction func, unsigned char value, bool alphaToCoverage );
-            /// @copydoc RenderSystem::getDisplayMonitorCount
-            unsigned int getDisplayMonitorCount() const;
 
             void _destroyDepthBuffer(RenderTarget* pRenderWnd);
         

@@ -30,7 +30,6 @@ THE SOFTWARE.
 #include "OgreEntity.h"
 #include "OgreEdgeListBuilder.h"
 #include "OgreLodStrategy.h"
-#include "OgreIteratorWrappers.h"
 #include "OgreSubEntity.h"
 
 namespace Ogre {
@@ -44,7 +43,6 @@ namespace Ogre {
     StaticGeometry::StaticGeometry(SceneManager* owner, const String& name):
         mOwner(owner),
         mName(name),
-        mBuilt(false),
         mUpperDistance(0.0f),
         mSquaredUpperDistance(0.0f),
         mCastShadows(false),
@@ -873,8 +871,8 @@ namespace Ogre {
         return LODIterator(mLodBucketList.begin(), mLodBucketList.end());
     }
     //---------------------------------------------------------------------
-    ShadowCaster::ShadowRenderableListIterator
-    StaticGeometry::Region::getShadowVolumeRenderableIterator(
+    const ShadowCaster::ShadowRenderableList&
+    StaticGeometry::Region::getShadowVolumeRenderableList(
         ShadowTechnique shadowTechnique, const Light* light,
         HardwareIndexBufferSharedPtr* indexBuffer, size_t* indexBufferUsedSize,
         bool extrude, Real extrusionDistance, unsigned long flags)
@@ -901,18 +899,13 @@ namespace Ogre {
             light, shadowRendList, flags);
 
 
-        return ShadowCaster::ShadowRenderableListIterator(shadowRendList.begin(), shadowRendList.end());
+        return shadowRendList;
 
     }
     //--------------------------------------------------------------------------
     EdgeData* StaticGeometry::Region::getEdgeList(void)
     {
         return mLodBucketList[mCurrentLod]->getEdgeList();
-    }
-    //--------------------------------------------------------------------------
-    bool StaticGeometry::Region::hasEdgeList(void)
-    {
-        return getEdgeList() != 0;
     }
     //--------------------------------------------------------------------------
     void StaticGeometry::Region::dump(std::ofstream& of) const
@@ -1081,8 +1074,6 @@ namespace Ogre {
 
             if (stencilShadows)
             {
-                MaterialBucket::GeometryIterator geomIt =
-                    mat->getGeometryIterator();
                 // Check if we have vertex programs here
                 Technique* t = mat->getMaterial()->getBestTechnique();
                 if (t)
@@ -1097,10 +1088,8 @@ namespace Ogre {
                     }
                 }
 
-                while (geomIt.hasMoreElements())
+                for (GeometryBucket* geom : mat->getGeometryList())
                 {
-                    GeometryBucket* geom = geomIt.getNext();
-
                     // Check we're dealing with 16-bit indexes here
                     // Since stencil shadows can only deal with 16-bit
                     // More than that and stencil is probably too CPU-heavy
@@ -1178,9 +1167,7 @@ namespace Ogre {
         // We need to search the edge list for silhouette edges
         if (!mEdgeList)
         {
-            OGRE_EXCEPT(Exception::ERR_INVALIDPARAMS,
-                "You enabled stencil shadows after the buid process!",
-                "StaticGeometry::LODBucket::getShadowVolumeRenderableIterator");
+            OGRE_EXCEPT(Exception::ERR_INVALIDPARAMS, "You enabled stencil shadows after the build process!");
         }
 
         // Init shadow renderable list if required
@@ -1685,7 +1672,7 @@ namespace Ogre {
 
             // Also set up hardware W buffer if appropriate
             RenderSystem* rend = Root::getSingleton().getRenderSystem();
-            if (rend && rend->getCapabilities()->hasCapability(RSC_VERTEX_PROGRAM))
+            if (rend)
             {
                 buf = HardwareBufferManager::getSingleton().createVertexBuffer(
                     sizeof(float), mVertexData->vertexCount * 2,

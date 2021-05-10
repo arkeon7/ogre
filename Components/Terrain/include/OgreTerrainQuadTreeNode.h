@@ -77,7 +77,7 @@ namespace Ogre
         the same (relative) LOD index no matter where you are in the tree, therefore
         buffers can potentially be reused more easily.
     */
-    class _OgreTerrainExport TerrainQuadTreeNode : public TerrainAlloc
+    class _OgreTerrainExport TerrainQuadTreeNode : private Renderable, private MovableObject
     {
     public:
         /** Constructor.
@@ -87,10 +87,9 @@ namespace Ogre
         @param size The size of the node in vertices at the highest LOD
         @param lod The base LOD level
         @param depth The depth that this node is at in the tree (or convenience)
-        @param quadrant The index of the quadrant (0, 1, 2, 3)
         */
         TerrainQuadTreeNode(Terrain* terrain, TerrainQuadTreeNode* parent, 
-            uint16 xoff, uint16 yoff, uint16 size, uint16 lod, uint16 depth, uint16 quadrant);
+            uint16 xoff, uint16 yoff, uint16 size, uint16 lod, uint16 depth);
         virtual ~TerrainQuadTreeNode();
 
         /// Get the horizontal offset into the main terrain data of this node
@@ -182,6 +181,7 @@ namespace Ogre
         void assignVertexData(uint16 treeDepthStart, uint16 treeDepthEnd, uint16 resolution, uint sz);
 
         /** Tell a node that it should use an anscestor's vertex data.
+        @param owner
         @param treeDepthEnd The end of the depth that should use this data (exclusive)
         @param resolution The resolution of the data to use
         */
@@ -222,7 +222,10 @@ namespace Ogre
         bool pointIntersectsNode(long x, long y);
 
         /// Get the AABB (local coords) of this node
-        const AxisAlignedBox& getAABB() const;
+        const AxisAlignedBox& getBoundingBox(void) const { return mAABB; }
+
+        /// @deprecated use getBoundingBox
+        OGRE_DEPRECATED const AxisAlignedBox& getAABB() const;
         /// Get the bounding radius of this node
         Real getBoundingRadius() const;
         /// Get the local centre of this node, relative to parent terrain centre
@@ -257,9 +260,7 @@ namespace Ogre
         /// Buffer binding used for holding delta values
         static unsigned short DELTA_BUFFER;
 
-        /// Returns the internal renderable object for this node
-        Renderable *_getRenderable();
-    protected:
+    private:
         Terrain* mTerrain;
         TerrainQuadTreeNode* mParent;
         TerrainQuadTreeNode* mChildren[4];
@@ -271,7 +272,6 @@ namespace Ogre
         uint16 mSize;
         uint16 mBaseLod;
         uint16 mDepth;
-        uint16 mQuadrant;
         Vector3 mLocalCentre; /// Relative to terrain centre
         AxisAlignedBox mAABB; /// Relative to mLocalCentre
         Real mBoundingRadius; /// Relative to mLocalCentre
@@ -327,62 +327,21 @@ namespace Ogre
             a SceneManager::Listener to precalculate which nodes will be displayed 
             when it comes to purely a LOD basis.
         */
-        class _OgreTerrainExport Movable : public MovableObject
-        {
-        protected:
-            TerrainQuadTreeNode* mParent;
-        public:
-            Movable(TerrainQuadTreeNode* parent);
-            virtual ~Movable();
-            
-            // necessary overrides
-            const String& getMovableType(void) const;
-            const AxisAlignedBox& getBoundingBox(void) const;
-            Real getBoundingRadius(void) const;
-            void _updateRenderQueue(RenderQueue* queue);
-            void visitRenderables(Renderable::Visitor* visitor,  bool debugRenderables = false);
-            bool isVisible(void) const;
-            uint32 getVisibilityFlags(void) const;
-            uint32 getQueryFlags(void) const;
-            bool getCastShadows(void) const;
-
-        };
-        Movable* mMovable;
-        friend class Movable;
         SceneNode* mLocalNode;
 
-        /// Hook to the render queue
-        class _OgreTerrainExport Rend : public Renderable, public TerrainAlloc
-        {
-        protected:
-            TerrainQuadTreeNode* mParent;
-        public:
-            Rend(TerrainQuadTreeNode* parent);
-            virtual ~Rend();
-
-            const MaterialPtr& getMaterial(void) const;
-            Technique* getTechnique(void) const;
-            void getRenderOperation(RenderOperation& op);
-            void getWorldTransforms(Matrix4* xform) const;
-            Real getSquaredViewDepth(const Camera* cam) const;
-            const LightList& getLights(void) const;
-            bool getCastsShadows(void) const;
-
-        };
-        Rend* mRend;
-        friend class Rend;
-
         // actual implementation of MovableObject methods
-        void updateRenderQueue(RenderQueue* queue);
+        bool isVisible(void) const override;
+        const String& getMovableType(void) const override;
+        void _updateRenderQueue(RenderQueue* queue);
         void visitRenderables(Renderable::Visitor* visitor,  bool debugRenderables = false);
         // actual implementations of Renderable methods
-        const MaterialPtr& getMaterial(void) const;
-        Technique* getTechnique(void) const;
-        void getRenderOperation(RenderOperation& op);
-        void getWorldTransforms(Matrix4* xform) const;
-        Real getSquaredViewDepth(const Camera* cam) const;
-        const LightList& getLights(void) const;
-        bool getCastsShadows(void) const;
+        const MaterialPtr& getMaterial(void) const override;
+        Technique* getTechnique(void) const override;
+        void getRenderOperation(RenderOperation& op) override;
+        void getWorldTransforms(Matrix4* xform) const override;
+        Real getSquaredViewDepth(const Camera* cam) const override;
+        const LightList& getLights(void) const override;
+        bool getCastsShadows(void) const override;
 
 
         const VertexDataRecord* getVertexDataRecord() const;

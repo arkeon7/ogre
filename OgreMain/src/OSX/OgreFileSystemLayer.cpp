@@ -28,6 +28,7 @@
 #include "OgreFileSystemLayer.h"
 #include "macUtils.h"
 #include <pwd.h>
+#include <dlfcn.h>
 
 namespace Ogre
 {
@@ -43,6 +44,19 @@ namespace Ogre
     {
         mConfigPaths.push_back(Ogre::macBundlePath() + "/Contents/Resources/");
         mConfigPaths.push_back(Ogre::macBundlePath() + "/");
+
+        Dl_info info;
+        if (dladdr((const void*)macBundlePath, &info))
+        {
+            String base(info.dli_fname);
+            // need to strip the module filename from the path
+            String::size_type pos = base.rfind('/');
+            if (pos != String::npos)
+                base.erase(pos);
+
+            // look relative to the dylib according to PIP structure
+            mConfigPaths.push_back(StringUtil::normalizeFilePath(base+"/../../../../bin/"));
+        }
     }
     //---------------------------------------------------------------------
     void FileSystemLayer::prepareUserHome(const Ogre::String& subdir)
@@ -60,22 +74,13 @@ namespace Ogre
 
         if (!mHomePath.empty())
         {
-            // create an Ogre subdir in application support
-            mHomePath.append("/Library/Application Support/Ogre/");
+            mHomePath.append("/Library/Application Support/");
+            // now create the given subdir
+            mHomePath.append(subdir + '/');
             if (mkdir(mHomePath.c_str(), 0755) != 0 && errno != EEXIST)
             {
                 // can't create dir
                 mHomePath.clear();
-            }
-            else
-            {
-                // now create the given subdir
-                mHomePath.append(subdir + '/');
-                if (mkdir(mHomePath.c_str(), 0755) != 0 && errno != EEXIST)
-                {
-                    // can't create dir
-                    mHomePath.clear();
-                }
             }
         }
 

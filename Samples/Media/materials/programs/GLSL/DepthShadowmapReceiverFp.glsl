@@ -1,5 +1,3 @@
-#version 120
-
 uniform float inverseShadowmapSize;
 uniform float fixedDepthBias;
 uniform float gradientClamp;
@@ -16,14 +14,18 @@ void main()
 	// point on shadowmap
 	shadowUV = shadowUV / shadowUV.w;
 	float centerdepth = texture2D(shadowMap, shadowUV.xy).x;
-    
+
+#ifndef OGRE_REVERSED_Z
+	shadowUV.z = shadowUV.z * 0.5 + 0.5; // convert -1..1 to 0..1
+#endif
+
     // gradient calculation
   	float pixeloffset = inverseShadowmapSize;
     vec4 depths = vec4(
-    	texture2D(shadowMap, shadowUV.xy + vec2(-pixeloffset, 0)).x,
-    	texture2D(shadowMap, shadowUV.xy + vec2(+pixeloffset, 0)).x,
-    	texture2D(shadowMap, shadowUV.xy + vec2(0, -pixeloffset)).x,
-    	texture2D(shadowMap, shadowUV.xy + vec2(0, +pixeloffset)).x);
+        texture2D(shadowMap, shadowUV.xy + vec2(-pixeloffset, 0.0)).x,
+        texture2D(shadowMap, shadowUV.xy + vec2(+pixeloffset, 0.0)).x,
+        texture2D(shadowMap, shadowUV.xy + vec2(0.0, -pixeloffset)).x,
+        texture2D(shadowMap, shadowUV.xy + vec2(0.0, +pixeloffset)).x);
 
 	vec2 differences = abs( depths.yw - depths.xz );
 	float gradient = min(gradientClamp, max(differences.x, differences.y));
@@ -45,10 +47,10 @@ void main()
 	
 	final *= 0.2;
 
-	gl_FragColor = vec4(outColor.xyz * final, 1);
+	gl_FragColor = vec4(outColor.xyz * final, 1.0);
 	
 #else
-	gl_FragColor = (centerdepth > shadowUV.z) ? vec4(outColor.xyz,1) : vec4(0,0,0,1);
+	gl_FragColor = (finalCenterDepth > shadowUV.z) ? vec4(outColor.xyz,1) : vec4(0,0,0,1);
 #endif
 }
 

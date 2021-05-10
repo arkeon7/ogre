@@ -31,7 +31,6 @@ THE SOFTWARE.
 // Precompiler options
 #include "OgrePrerequisites.h"
 #include "OgrePass.h"
-#include "OgreRadixSort.h"
 #include "OgreHeaderPrefix.h"
 
 namespace Ogre {
@@ -122,7 +121,7 @@ namespace Ogre {
             OM_SORT_ASCENDING = 6
         };
 
-    protected:
+    private:
         /// Comparator to order pass groups
         struct PassGroupLess
         {
@@ -142,82 +141,12 @@ namespace Ogre {
                 }
             }
         };
-        /// Comparator to order objects by descending camera distance
-        struct DepthSortDescendingLess
-        {
-            const Camera* camera;
-
-            DepthSortDescendingLess(const Camera* cam)
-                : camera(cam)
-            {
-            }
-
-            bool operator()(const RenderablePass& a, const RenderablePass& b) const
-            {
-                if (a.renderable == b.renderable)
-                {
-                    // Same renderable, sort by pass hash
-                    return a.pass->getHash() < b.pass->getHash();
-                }
-                else
-                {
-                    // Different renderables, sort by depth
-                    Real adepth = a.renderable->getSquaredViewDepth(camera);
-                    Real bdepth = b.renderable->getSquaredViewDepth(camera);
-                    if (Math::RealEqual(adepth, bdepth))
-                    {
-                        // Must return deterministic result, doesn't matter what
-                        return a.pass < b.pass;
-                    }
-                    else
-                    {
-                        // Sort DESCENDING by depth (i.e. far objects first)
-                        return (adepth > bdepth);
-                    }
-                }
-
-            }
-        };
-
         /** Vector of RenderablePass objects, this is built on the assumption that
          vectors only ever increase in size, so even if we do clear() the memory stays
          allocated, ie fast */
         typedef std::vector<RenderablePass> RenderablePassList;
         /** Map of pass to renderable lists, this is a grouping by pass. */
         typedef std::map<Pass*, RenderableList, PassGroupLess> PassGroupRenderableMap;
-
-        /// Functor for accessing sort value 1 for radix sort (Pass)
-        struct RadixSortFunctorPass
-        {
-            uint32 operator()(const RenderablePass& p) const
-            {
-                return p.pass->getHash();
-            }
-        };
-
-        /// Radix sorter for accessing sort value 1 (Pass)
-        static RadixSort<RenderablePassList, RenderablePass, uint32> msRadixSorter1;
-
-        /// Functor for descending sort value 2 for radix sort (distance)
-        struct RadixSortFunctorDistance
-        {
-            const Camera* camera;
-
-            RadixSortFunctorDistance(const Camera* cam)
-                : camera(cam)
-            {
-            }
-
-            float operator()(const RenderablePass& p) const
-            {
-                // Sort DESCENDING by depth (ie far objects first), use negative distance
-                // here because radix sorter always dealing with accessing sort
-                return static_cast<float>(- p.renderable->getSquaredViewDepth(camera));
-            }
-        };
-
-        /// Radix sorter for sort value 2 (distance)
-        static RadixSort<RenderablePassList, RenderablePass, float> msRadixSorter2;
 
         /// Bitmask of the organisation modes requested
         uint8 mOrganisationMode;
@@ -309,7 +238,7 @@ namespace Ogre {
     */
     class _OgreExport RenderPriorityGroup : public RenderQueueAlloc
     {
-    protected:
+    private:
 
         /// Parent queue group
         RenderQueueGroup* mParent;
@@ -455,8 +384,7 @@ namespace Ogre {
         typedef std::map<ushort, RenderPriorityGroup*, std::less<ushort> > PriorityMap;
         typedef MapIterator<PriorityMap> PriorityMapIterator;
         typedef ConstMapIterator<PriorityMap> ConstPriorityMapIterator;
-    protected:
-        RenderQueue* mParent;
+    private:
         bool mSplitPassesByLightingType;
         bool mSplitNoShadowPasses;
         bool mShadowCastersNotReceivers;
@@ -469,12 +397,10 @@ namespace Ogre {
 
 
     public:
-        RenderQueueGroup(RenderQueue* parent,
-            bool splitPassesByLightingType,
+        RenderQueueGroup(bool splitPassesByLightingType,
             bool splitNoShadowPasses,
             bool shadowCastersNotReceivers) 
-            : mParent(parent)
-            , mSplitPassesByLightingType(splitPassesByLightingType)
+            : mSplitPassesByLightingType(splitPassesByLightingType)
             , mSplitNoShadowPasses(splitNoShadowPasses)
             , mShadowCastersNotReceivers(shadowCastersNotReceivers)
             , mShadowsEnabled(true)
@@ -491,17 +417,7 @@ namespace Ogre {
             }
         }
 
-        /** Get an iterator for browsing through child contents. */
-        PriorityMapIterator getIterator(void)
-        {
-            return PriorityMapIterator(mPriorityGroups.begin(), mPriorityGroups.end());
-        }
-
-        /** Get a const iterator for browsing through child contents. */
-        ConstPriorityMapIterator getIterator(void) const
-        {
-            return ConstPriorityMapIterator(mPriorityGroups.begin(), mPriorityGroups.end());
-        }
+        const PriorityMap& getPriorityGroups() const { return mPriorityGroups; }
 
         /** Add a renderable to this group, with the given priority. */
         void addRenderable(Renderable* pRend, Technique* pTech, ushort priority)
@@ -522,7 +438,7 @@ namespace Ogre {
                     pPriorityGrp->addOrganisationMode((QueuedRenderableCollection::OrganisationMode)mOrganisationMode);
                 }
 
-                mPriorityGroups.insert(PriorityMap::value_type(priority, pPriorityGrp));
+                mPriorityGroups.emplace(priority, pPriorityGrp);
             }
             else
             {
@@ -673,12 +589,10 @@ namespace Ogre {
         */
         void merge( const RenderQueueGroup* rhs )
         {
-            ConstPriorityMapIterator it = rhs->getIterator();
-
-            while( it.hasMoreElements() )
+            for ( const auto& pg : rhs->getPriorityGroups() )
             {
-                ushort priority = it.peekNextKey();
-                RenderPriorityGroup* pSrcPriorityGrp = it.getNext();
+                ushort priority = pg.first;
+                RenderPriorityGroup* pSrcPriorityGrp = pg.second;
                 RenderPriorityGroup* pDstPriorityGrp;
 
                 // Check if priority group is there
@@ -696,7 +610,7 @@ namespace Ogre {
                         pDstPriorityGrp->addOrganisationMode((QueuedRenderableCollection::OrganisationMode)mOrganisationMode);
                     }
 
-                    mPriorityGroups.insert(PriorityMap::value_type(priority, pDstPriorityGrp));
+                    mPriorityGroups.emplace(priority, pDstPriorityGrp);
                 }
                 else
                 {

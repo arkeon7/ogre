@@ -46,7 +46,7 @@ namespace Ogre {
     */
     class _OgreExport PatchMesh : public Mesh
     {
-    protected:
+    private:
         /// Internal surface definition
         PatchSurface mSurface;
         /// Vertex declaration, cloned from the input
@@ -73,11 +73,10 @@ namespace Ogre {
         @param factor Subdivision factor as a value from 0 (control points only) to 1 (maximum
             subdivision). */
         void setSubdivision(Real factor);
-    protected:
-        /// Overridden from Resource
-        void loadImpl(void);
+    private:
+        void loadImpl(void) override;
         /// Overridden from Resource - do nothing (no disk caching)
-        void prepareImpl(void) {}
+        void prepareImpl(void) override {}
 
     };
     /** @} */

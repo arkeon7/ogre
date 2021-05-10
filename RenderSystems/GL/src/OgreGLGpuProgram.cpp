@@ -66,7 +66,7 @@ GLGpuProgram::~GLGpuProgram()
     unload(); 
 }
 
-bool GLGpuProgram::isAttributeValid(VertexElementSemantic semantic, uint index)
+bool GLGpuProgramBase::isAttributeValid(VertexElementSemantic semantic, uint index)
 {
     // default implementation
     switch(semantic)
@@ -85,19 +85,6 @@ bool GLGpuProgram::isAttributeValid(VertexElementSemantic semantic, uint index)
     }
 
     return false;
-}
-
-//-----------------------------------------------------------------------------
-size_t GLGpuProgram::calculateSize(void) const
-{
-    size_t memSize = 0;
-
-    // Delegate Names
-    memSize += sizeof(GLuint);
-    memSize += sizeof(GLenum);
-    memSize += GpuProgram::calculateSize();
-    
-    return memSize;
 }
 
 GLArbGpuProgram::GLArbGpuProgram(ResourceManager* creator, const String& name, 
@@ -132,7 +119,7 @@ void GLArbGpuProgram::bindProgramParameters(GpuProgramParametersSharedPtr params
     GLenum type = getProgramType();
     
     // only supports float constants
-    GpuLogicalBufferStructPtr floatStruct = params->getFloatLogicalBufferStruct();
+    GpuLogicalBufferStructPtr floatStruct = params->getLogicalBufferStruct();
 
     for (GpuLogicalIndexUseMap::const_iterator i = floatStruct->map.begin();
         i != floatStruct->map.end(); ++i)
@@ -150,20 +137,6 @@ void GLArbGpuProgram::bindProgramParameters(GpuProgramParametersSharedPtr params
             }
         }
     }
-}
-
-void GLArbGpuProgram::bindProgramPassIterationParameters(GpuProgramParametersSharedPtr params)
-{
-    if (params->hasPassIterationNumber())
-    {
-        GLenum type = getProgramType();
-
-        size_t physicalIndex = params->getPassIterationNumberIndex();
-        size_t logicalIndex = params->getFloatLogicalIndexForPhysicalIndex(physicalIndex);
-        const float* pFloat = params->getFloatPointer(physicalIndex);
-        glProgramLocalParameter4fvARB(type, (GLuint)logicalIndex, pFloat);
-    }
-
 }
 
 void GLArbGpuProgram::unloadImpl(void)
@@ -184,12 +157,8 @@ void GLArbGpuProgram::loadFromSource(void)
     {
         GLint errPos;
         glGetIntegerv(GL_PROGRAM_ERROR_POSITION_ARB, &errPos);
-        String errPosStr = StringConverter::toString(errPos);
         const char* errStr = (const char*)glGetString(GL_PROGRAM_ERROR_STRING_ARB);
-        // XXX New exception code?
-        OGRE_EXCEPT(Exception::ERR_INTERNAL_ERROR, 
-            "Cannot load GL vertex program " + mName + 
-            ".  Line " + errPosStr + ":\n" + errStr, mName);
+        OGRE_EXCEPT(Exception::ERR_RENDERINGAPI_ERROR, "'" + mName + "' " + errStr);
     }
     glBindProgramARB(getProgramType(), 0);
 }

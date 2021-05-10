@@ -30,8 +30,7 @@ THE SOFTWARE.
 
 #include "OgrePrerequisites.h"
 #include "OgreRenderOperation.h"
-#include "OgreVector3.h"
-#include "OgreVector4.h"
+#include "OgreVector.h"
 #include "OgreHeaderPrefix.h"
 
 namespace Ogre {
@@ -200,7 +199,7 @@ namespace Ogre {
 
         /// Debugging method
         void log(Log* l);
-    protected:
+    private:
 
         /** A vertex can actually represent several vertices in the final model, because
         vertices along texture seams etc will have been duplicated. In order to properly

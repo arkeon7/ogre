@@ -217,7 +217,6 @@ namespace Ogre {
     class _OgreExport RegionSceneQuery
         : public SceneQuery, public SceneQueryListener
     {
-    protected:
         SceneQueryResult* mLastResult;
     public:
         /** Standard constructor, should be called by SceneManager. */
@@ -310,17 +309,6 @@ namespace Ogre {
 
     };
 
-
-    /*
-    /// Specialises the SceneQuery class for querying within a pyramid. 
-    class _OgreExport PyramidSceneQuery : public RegionSceneQuery
-    {
-    public:
-        PyramidSceneQuery(SceneManager* mgr);
-        virtual ~PyramidSceneQuery();
-    };
-    */
-
     /** Alternative listener class for dealing with RaySceneQuery.
     @remarks
         Because the RaySceneQuery returns results in an extra bit of information, namely
@@ -371,6 +359,7 @@ namespace Ogre {
     {
     protected:
         Ray mRay;
+    private:
         bool mSortByDistance;
         ushort mMaxResults;
         RaySceneQueryResult mResult;
@@ -506,7 +495,6 @@ namespace Ogre {
     class _OgreExport IntersectionSceneQuery
         : public SceneQuery, public IntersectionSceneQueryListener 
     {
-    protected:
         IntersectionSceneQueryResult* mLastResult;
     public:
         IntersectionSceneQuery(SceneManager* mgr);

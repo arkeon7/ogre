@@ -98,8 +98,7 @@ namespace Ogre {
 
     GL3PlusSampler::GL3PlusSampler(GL3PlusRenderSystem* rs) : mSamplerId(0)
     {
-        if(rs->hasMinGLVersion(3, 3))
-            glGenSamplers(1, &mSamplerId);
+        glGenSamplers(1, &mSamplerId);
     }
     GL3PlusSampler::~GL3PlusSampler()
     {
@@ -119,8 +118,13 @@ namespace Ogre {
         OGRE_CHECK_GL_ERROR(glSamplerParameteri(mSamplerId, GL_TEXTURE_WRAP_R,
                                                 getTextureAddressingMode(mAddressMode.w)));
 
+        bool reversedZ = Root::getSingleton().getRenderSystem()->isReverseDepthBufferEnabled();
+
         if (mAddressMode.u == TAM_BORDER || mAddressMode.v == TAM_BORDER || mAddressMode.w == TAM_BORDER)
-            OGRE_CHECK_GL_ERROR(glSamplerParameterfv( mSamplerId, GL_TEXTURE_BORDER_COLOR, mBorderColour.ptr()));
+        {
+            auto borderColour = (reversedZ && mCompareEnabled) ? ColourValue::White - mBorderColour : mBorderColour;
+            OGRE_CHECK_GL_ERROR(glSamplerParameterfv( mSamplerId, GL_TEXTURE_BORDER_COLOR, borderColour.ptr()));
+        }
         OGRE_CHECK_GL_ERROR(glSamplerParameterf(mSamplerId, GL_TEXTURE_LOD_BIAS, mMipmapBias));
 
         auto caps = Root::getSingleton().getRenderSystem()->getCapabilities();
@@ -132,9 +136,14 @@ namespace Ogre {
         OGRE_CHECK_GL_ERROR(
             glSamplerParameteri(mSamplerId, GL_TEXTURE_COMPARE_MODE,
                                 mCompareEnabled ? GL_COMPARE_REF_TO_TEXTURE : GL_NONE));
+
+        auto cmpFunc = mCompareFunc;
+        if(reversedZ)
+            cmpFunc = GL3PlusRenderSystem::reverseCompareFunction(cmpFunc);
+
         OGRE_CHECK_GL_ERROR(
             glSamplerParameteri(mSamplerId, GL_TEXTURE_COMPARE_FUNC,
-                                GL3PlusRenderSystem::convertCompareFunction(mCompareFunc)));
+                                GL3PlusRenderSystem::convertCompareFunction(cmpFunc)));
 
         // Combine with existing mip filter
         OGRE_CHECK_GL_ERROR(glSamplerParameteri(mSamplerId, GL_TEXTURE_MIN_FILTER,
@@ -220,17 +229,17 @@ namespace Ogre {
             return PF_BYTE_RGBA;
         }
 
-        if(GL3PlusPixelUtil::getGLInternalFormat(format) == GL_NONE)
-        {
-            return PF_BYTE_RGBA;
-        }
-
         // Check if this is a valid rendertarget format
         if (usage & TU_RENDERTARGET)
         {
             /// Get closest supported alternative
             /// If mFormat is supported it's returned
             return GL3PlusRTTManager::getSingleton().getSupportedAlternative(format);
+        }
+
+        if(GL3PlusPixelUtil::getGLInternalFormat(format) == GL_NONE)
+        {
+            return PF_BYTE_RGBA;
         }
 
         // Supported

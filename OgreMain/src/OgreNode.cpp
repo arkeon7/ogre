@@ -403,28 +403,12 @@ namespace Ogre {
         needUpdate();
     }
 
-
-    //-----------------------------------------------------------------------
-    void Node::setPosition(Real x, Real y, Real z)
-    {
-        Vector3 v(x,y,z);
-        setPosition(v);
-    }
-
     //-----------------------------------------------------------------------
     Matrix3 Node::getLocalAxes(void) const
     {
-        Vector3 axisX = Vector3::UNIT_X;
-        Vector3 axisY = Vector3::UNIT_Y;
-        Vector3 axisZ = Vector3::UNIT_Z;
-
-        axisX = mOrientation * axisX;
-        axisY = mOrientation * axisY;
-        axisZ = mOrientation * axisZ;
-
-        return Matrix3(axisX.x, axisY.x, axisZ.x,
-                       axisX.y, axisY.y, axisZ.y,
-                       axisX.z, axisY.z, axisZ.z);
+        Matrix3 ret;
+        mOrientation.ToRotationMatrix(ret);
+        return ret;
     }
 
     //-----------------------------------------------------------------------
@@ -454,48 +438,6 @@ namespace Ogre {
         needUpdate();
 
     }
-    //-----------------------------------------------------------------------
-    void Node::translate(Real x, Real y, Real z, TransformSpace relativeTo)
-    {
-        Vector3 v(x,y,z);
-        translate(v, relativeTo);
-    }
-    //-----------------------------------------------------------------------
-    void Node::translate(const Matrix3& axes, const Vector3& move, TransformSpace relativeTo)
-    {
-        Vector3 derived = axes * move;
-        translate(derived, relativeTo);
-    }
-    //-----------------------------------------------------------------------
-    void Node::translate(const Matrix3& axes, Real x, Real y, Real z, TransformSpace relativeTo)
-    {
-        Vector3 d(x,y,z);
-        translate(axes,d,relativeTo);
-    }
-    //-----------------------------------------------------------------------
-    void Node::roll(const Radian& angle, TransformSpace relativeTo)
-    {
-        rotate(Vector3::UNIT_Z, angle, relativeTo);
-    }
-    //-----------------------------------------------------------------------
-    void Node::pitch(const Radian& angle, TransformSpace relativeTo)
-    {
-        rotate(Vector3::UNIT_X, angle, relativeTo);
-    }
-    //-----------------------------------------------------------------------
-    void Node::yaw(const Radian& angle, TransformSpace relativeTo)
-    {
-        rotate(Vector3::UNIT_Y, angle, relativeTo);
-
-    }
-    //-----------------------------------------------------------------------
-    void Node::rotate(const Vector3& axis, const Radian& angle, TransformSpace relativeTo)
-    {
-        Quaternion q;
-        q.FromAngleAxis(angle,axis);
-        rotate(q, relativeTo);
-    }
-
     //-----------------------------------------------------------------------
     void Node::rotate(const Quaternion& q, TransformSpace relativeTo)
     {
@@ -652,12 +594,6 @@ namespace Ogre {
         needUpdate();
     }
     //-----------------------------------------------------------------------
-    void Node::setScale(Real x, Real y, Real z)
-    {
-        setScale(Vector3(x, y, z));
-    }
-
-    //-----------------------------------------------------------------------
     void Node::setInheritOrientation(bool inherit)
     {
         mInheritOrientation = inherit;
@@ -760,9 +696,10 @@ namespace Ogre {
     Real Node::getSquaredViewDepth(const Camera* cam) const
     {
         Vector3 diff = _getDerivedPosition() - cam->getDerivedPosition();
+        Vector3 zAxis = cam->getDerivedDirection();
 
-        // NB use squared length rather than real depth to avoid square root
-        return diff.squaredLength();
+        // NB use squared length to avoid square root
+        return cam->getSortMode() == SM_DISTANCE ? diff.squaredLength() : Math::Sqr(zAxis.dotProduct(diff));
     }
     //-----------------------------------------------------------------------
     void Node::needUpdate(bool forceParentUpdate)
@@ -836,150 +773,5 @@ namespace Ogre {
         }
         msQueuedUpdates.clear();
     }
-    //---------------------------------------------------------------------
-    Node::DebugRenderable* Node::getDebugRenderable(Real scaling)
-    {
-        if (!mDebug)
-        {
-            mDebug.reset(new DebugRenderable(this));
-        }
-        mDebug->setScaling(scaling);
-        return mDebug.get();
-    }
-    //---------------------------------------------------------------------
-    //-----------------------------------------------------------------------
-    Node::DebugRenderable::DebugRenderable(Node* parent)
-        : mParent(parent)
-    {
-        String matName = "Ogre/Debug/AxesMat";
-        mMat = MaterialManager::getSingleton().getByName(matName, ResourceGroupManager::INTERNAL_RESOURCE_GROUP_NAME);
-        if (!mMat)
-        {
-            mMat = MaterialManager::getSingleton().create(matName, ResourceGroupManager::INTERNAL_RESOURCE_GROUP_NAME);
-            Pass* p = mMat->getTechnique(0)->getPass(0);
-            p->setLightingEnabled(false);
-            p->setPolygonModeOverrideable(false);
-            p->setVertexColourTracking(TVC_AMBIENT);
-            p->setSceneBlending(SBT_TRANSPARENT_ALPHA);
-            p->setCullingMode(CULL_NONE);
-            p->setDepthWriteEnabled(false);
-            p->setDepthCheckEnabled(false);
-        }
-
-        String meshName = "Ogre/Debug/AxesMesh";
-        mMeshPtr = MeshManager::getSingleton().getByName(meshName, ResourceGroupManager::INTERNAL_RESOURCE_GROUP_NAME);
-        if (!mMeshPtr)
-        {
-            ManualObject mo("tmp");
-            mo.begin(mMat->getName());
-            /* 3 axes, each made up of 2 of these (base plane = XY)
-             *   .------------|\
-             *   '------------|/
-             */
-            mo.estimateVertexCount(7 * 2 * 3);
-            mo.estimateIndexCount(3 * 2 * 3);
-            Quaternion quat[6];
-            ColourValue col[3];
-
-            // x-axis
-            quat[0] = Quaternion::IDENTITY;
-            quat[1].FromAxes(Vector3::UNIT_X, Vector3::NEGATIVE_UNIT_Z, Vector3::UNIT_Y);
-            col[0] = ColourValue::Red;
-            col[0].a = 0.8;
-            // y-axis
-            quat[2].FromAxes(Vector3::UNIT_Y, Vector3::NEGATIVE_UNIT_X, Vector3::UNIT_Z);
-            quat[3].FromAxes(Vector3::UNIT_Y, Vector3::UNIT_Z, Vector3::UNIT_X);
-            col[1] = ColourValue::Green;
-            col[1].a = 0.8;
-            // z-axis
-            quat[4].FromAxes(Vector3::UNIT_Z, Vector3::UNIT_Y, Vector3::NEGATIVE_UNIT_X);
-            quat[5].FromAxes(Vector3::UNIT_Z, Vector3::UNIT_X, Vector3::UNIT_Y);
-            col[2] = ColourValue::Blue;
-            col[2].a = 0.8;
-
-            Vector3 basepos[7] = 
-            {
-                // stalk
-                Vector3(0, 0.05, 0), 
-                Vector3(0, -0.05, 0),
-                Vector3(0.7, -0.05, 0),
-                Vector3(0.7, 0.05, 0),
-                // head
-                Vector3(0.7, -0.15, 0),
-                Vector3(1, 0, 0),
-                Vector3(0.7, 0.15, 0)
-            };
-
-
-            // vertices
-            // 6 arrows
-            for (size_t i = 0; i < 6; ++i)
-            {
-                // 7 points
-                for (size_t p = 0; p < 7; ++p)
-                {
-                    Vector3 pos = quat[i] * basepos[p];
-                    mo.position(pos);
-                    mo.colour(col[i / 2]);
-                }
-            }
-
-            // indices
-            // 6 arrows
-            for (uint32 i = 0; i < 6; ++i)
-            {
-                uint32 base = i * 7;
-                mo.triangle(base + 0, base + 1, base + 2);
-                mo.triangle(base + 0, base + 2, base + 3);
-                mo.triangle(base + 4, base + 5, base + 6);
-            }
-
-            mo.end();
-
-            mMeshPtr = mo.convertToMesh(meshName, ResourceGroupManager::INTERNAL_RESOURCE_GROUP_NAME);
-
-        }
-
-    }
-    //---------------------------------------------------------------------
-    Node::DebugRenderable::~DebugRenderable()
-    {
-    }
-    //-----------------------------------------------------------------------
-    const MaterialPtr& Node::DebugRenderable::getMaterial(void) const
-    {
-        return mMat;
-    }
-    //---------------------------------------------------------------------
-    void Node::DebugRenderable::getRenderOperation(RenderOperation& op)
-    {
-        return mMeshPtr->getSubMesh(0)->_getRenderOperation(op);
-    }
-    //-----------------------------------------------------------------------
-    void Node::DebugRenderable::getWorldTransforms(Matrix4* xform) const
-    {
-        // Assumes up to date
-        *xform = mParent->_getFullTransform();
-        if (!Math::RealEqual(mScaling, 1.0))
-        {
-            Matrix4 m = Matrix4::IDENTITY;
-            Vector3 s(mScaling, mScaling, mScaling);
-            m.setScale(s);
-            *xform = (*xform) * m;
-        }
-    }
-    //-----------------------------------------------------------------------
-    Real Node::DebugRenderable::getSquaredViewDepth(const Camera* cam) const
-    {
-        return mParent->getSquaredViewDepth(cam);
-    }
-    //-----------------------------------------------------------------------
-    const LightList& Node::DebugRenderable::getLights(void) const
-    {
-        // Nodes should not be lit by the scene, this will not get called
-        static LightList ll;
-        return ll;
-    }
-
 }
 

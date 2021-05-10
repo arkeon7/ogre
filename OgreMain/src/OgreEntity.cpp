@@ -162,7 +162,8 @@ namespace Ogre {
         // Initialise the AnimationState, if Mesh has animation
         if (hasSkeleton())
         {
-            mFrameBonesLastUpdated = OGRE_NEW_T(unsigned long, MEMCATEGORY_ANIMATION)(std::numeric_limits<unsigned long>::max());
+            mFrameBonesLastUpdated = OGRE_ALLOC_T(unsigned long, 1, MEMCATEGORY_ANIMATION);
+            *mFrameBonesLastUpdated = std::numeric_limits<unsigned long>::max();
             mNumBoneMatrices = mSkeletonInstance->getNumBones();
             mBoneMatrices = static_cast<Affine3*>(OGRE_MALLOC_SIMD(sizeof(Affine3) * mNumBoneMatrices, MEMCATEGORY_ANIMATION));
         }
@@ -381,10 +382,8 @@ namespace Ogre {
 
             // Get the index at this biased depth
             ushort newMeshLodIndex = mMesh->getLodIndex(biasedMeshLodValue);
-            // Apply maximum detail restriction (remember lower = higher detail)
-            newMeshLodIndex = std::max<ushort>(mMaxMeshLodIndex, newMeshLodIndex);
-            // Apply minimum detail restriction (remember higher = lower detail)
-            newMeshLodIndex = std::min<ushort>(mMinMeshLodIndex, newMeshLodIndex);
+            // Apply maximum detail restriction (remember lower = higher detail, higher = lower detail)
+            newMeshLodIndex = Math::Clamp(newMeshLodIndex, mMaxMeshLodIndex, mMinMeshLodIndex);
 
             // Construct event object
             EntityMeshLodChangedEvent evt;
@@ -425,10 +424,8 @@ namespace Ogre {
 
                 // Get the index at this biased depth
                 unsigned short idx = material->getLodIndex(biasedMaterialLodValue);
-                // Apply maximum detail restriction (remember lower = higher detail)
-                idx = std::max(mMaxMaterialLodIndex, idx);
-                // Apply minimum detail restriction (remember higher = lower detail)
-                idx = std::min(mMinMaterialLodIndex, idx);
+                // Apply maximum detail restriction (remember lower = higher detail, higher = lower detail)
+                idx = Math::Clamp(idx, mMaxMeshLodIndex, mMinMeshLodIndex);
 
                 // Construct event object
                 EntityMaterialLodChangedEvent subEntEvt;
@@ -451,11 +448,9 @@ namespace Ogre {
 
         }
         // Notify any child objects
-        ChildObjectList::iterator child_itr = mChildObjectList.begin();
-        ChildObjectList::iterator child_itr_end = mChildObjectList.end();
-        for( ; child_itr != child_itr_end; ++child_itr)
+        for(auto child : mChildObjectList)
         {
-            (*child_itr).second->_notifyCurrentCamera(cam);
+            child->_notifyCurrentCamera(cam);
         }
     }
     //-----------------------------------------------------------------------
@@ -562,12 +557,10 @@ namespace Ogre {
         AxisAlignedBox full_aa_box;
         full_aa_box.setNull();
 
-        ChildObjectList::const_iterator child_itr = mChildObjectList.begin();
-        ChildObjectList::const_iterator child_itr_end = mChildObjectList.end();
-        for( ; child_itr != child_itr_end; ++child_itr)
+        for(auto child : mChildObjectList)
         {
-            aa_box = child_itr->second->getBoundingBox();
-            TagPoint* tp = static_cast<TagPoint*>(child_itr->second->getParentNode());
+            aa_box = child->getBoundingBox();
+            TagPoint* tp = static_cast<TagPoint*>(child->getParentNode());
             // Use transform local to skeleton since world xform comes later
             aa_box.transform(tp->_getFullLocalTransform());
 
@@ -582,11 +575,9 @@ namespace Ogre {
         if (derive)
         {
             // derive child bounding boxes
-            ChildObjectList::const_iterator child_itr = mChildObjectList.begin();
-            ChildObjectList::const_iterator child_itr_end = mChildObjectList.end();
-            for( ; child_itr != child_itr_end; ++child_itr)
+            for(auto child : mChildObjectList)
             {
-                child_itr->second->getWorldBoundingBox(true);
+                child->getWorldBoundingBox(true);
             }
         }
         return MovableObject::getWorldBoundingBox(derive);
@@ -597,11 +588,9 @@ namespace Ogre {
         if (derive)
         {
             // derive child bounding boxes
-            ChildObjectList::const_iterator child_itr = mChildObjectList.begin();
-            ChildObjectList::const_iterator child_itr_end = mChildObjectList.end();
-            for( ; child_itr != child_itr_end; ++child_itr)
+            for(auto child : mChildObjectList)
             {
-                child_itr->second->getWorldBoundingSphere(true);
+                child->getWorldBoundingSphere(true);
             }
         }
         return MovableObject::getWorldBoundingSphere(derive);
@@ -701,11 +690,8 @@ namespace Ogre {
             displayEntity->updateAnimation();
 
             //--- pass this point,  we are sure that the transformation matrix of each bone and tagPoint have been updated
-            ChildObjectList::iterator child_itr = mChildObjectList.begin();
-            ChildObjectList::iterator child_itr_end = mChildObjectList.end();
-            for( ; child_itr != child_itr_end; ++child_itr)
+            for(auto child : mChildObjectList)
             {
-                MovableObject* child = child_itr->second;
                 bool visible = child->isVisible();
                 if (visible && (displayEntity != this))
                 {
@@ -730,25 +716,11 @@ namespace Ogre {
         // HACK to display bones
         // This won't work if the entity is not centered at the origin
         // TODO work out a way to allow bones to be rendered when Entity not centered
-        if (mDisplaySkeleton && hasSkeleton())
+        if (mDisplaySkeleton && hasSkeleton() && mManager && mManager->getDebugDrawer())
         {
-            int numBones = mSkeletonInstance->getNumBones();
-            for (unsigned short b = 0; b < numBones; ++b)
+            for (Bone* bone : mSkeletonInstance->getBones())
             {
-                Bone* bone = mSkeletonInstance->getBone(b);
-                if (mRenderQueuePrioritySet)
-                {
-                    assert(mRenderQueueIDSet == true);
-                    queue->addRenderable(bone->getDebugRenderable(1), mRenderQueueID, mRenderQueuePriority);
-                }
-                else if(mRenderQueueIDSet)
-                {
-                    queue->addRenderable(bone->getDebugRenderable(1), mRenderQueueID);
-                } 
-                else 
-                {
-                    queue->addRenderable(bone->getDebugRenderable(1));
-                }
+                mManager->getDebugDrawer()->drawBone(bone);
             }
         }
     }
@@ -967,11 +939,9 @@ namespace Ogre {
             mLastParentXform = _getParentNodeFullTransform();
 
             //--- Update the child object's transforms
-            ChildObjectList::iterator child_itr = mChildObjectList.begin();
-            ChildObjectList::iterator child_itr_end = mChildObjectList.end();
-            for( ; child_itr != child_itr_end; ++child_itr)
+            for(auto child : mChildObjectList)
             {
-                (*child_itr).second->getParentNode()->_update(true, true);
+                child->getParentNode()->_update(true, true);
             }
 
             // Also calculate bone world matrices, since are used as replacement world matrices,
@@ -1478,8 +1448,8 @@ namespace Ogre {
         {
             SubMesh* subMesh = mesh->getSubMesh(i);
             SubEntity* subEnt = OGRE_NEW SubEntity(this, subMesh);
-            if (subMesh->isMatInitialised())
-                subEnt->setMaterialName(subMesh->getMaterialName(), mesh->getGroup());
+            if (subMesh->getMaterial())
+                subEnt->setMaterial(subMesh->getMaterial());
             sublist->push_back(subEnt);
         }
     }
@@ -1496,9 +1466,19 @@ namespace Ogre {
     }
 
     //-----------------------------------------------------------------------
+
+    struct MovableObjectNameExists {
+        const String& name;
+        bool operator()(const MovableObject* mo) {
+            return mo->getName() == name;
+        }
+    };
+
     TagPoint* Entity::attachObjectToBone(const String &boneName, MovableObject *pMovable, const Quaternion &offsetOrientation, const Vector3 &offsetPosition)
     {
-        if (mChildObjectList.find(pMovable->getName()) != mChildObjectList.end())
+        MovableObjectNameExists pred = {pMovable->getName()};
+        auto it = std::find_if(mChildObjectList.begin(), mChildObjectList.end(), pred);
+        if (it != mChildObjectList.end())
         {
             OGRE_EXCEPT(Exception::ERR_DUPLICATE_ITEM,
                 "An object with the name " + pMovable->getName() + " already attached",
@@ -1538,30 +1518,33 @@ namespace Ogre {
     //-----------------------------------------------------------------------
     void Entity::attachObjectImpl(MovableObject *pObject, TagPoint *pAttachingPoint)
     {
-        assert(mChildObjectList.find(pObject->getName()) == mChildObjectList.end());
-        mChildObjectList[pObject->getName()] = pObject;
+        assert(std::find_if(mChildObjectList.begin(), mChildObjectList.end(),
+                            MovableObjectNameExists{pObject->getName()}) == mChildObjectList.end());
+
+        mChildObjectList.push_back(pObject);
         pObject->_notifyAttached(pAttachingPoint, true);
     }
 
     //-----------------------------------------------------------------------
     MovableObject* Entity::detachObjectFromBone(const String &name)
     {
-        ChildObjectList::iterator i = mChildObjectList.find(name);
+        MovableObjectNameExists pred = {name};
+        auto it = std::find_if(mChildObjectList.begin(), mChildObjectList.end(), pred);
 
-        if (i == mChildObjectList.end())
+        if (it == mChildObjectList.end())
         {
             OGRE_EXCEPT(Exception::ERR_ITEM_NOT_FOUND, "No child object entry found named " + name,
                 "Entity::detachObjectFromBone");
         }
-        MovableObject *obj = i->second;
-        detachObjectImpl(obj);
-        mChildObjectList.erase(i);
+        detachObjectImpl(*it);
+        std::swap(*it, mChildObjectList.back());
+        mChildObjectList.pop_back();
 
         // Trigger update of bounding box if necessary
         if (mParentNode)
             mParentNode->needUpdate();
 
-        return obj;
+        return *it;
     }
     //-----------------------------------------------------------------------
     void Entity::detachObjectFromBone(MovableObject* obj)
@@ -1570,10 +1553,11 @@ namespace Ogre {
         iend = mChildObjectList.end();
         for (i = mChildObjectList.begin(); i != iend; ++i)
         {
-            if (i->second == obj)
+            if (*i == obj)
             {
                 detachObjectImpl(obj);
-                mChildObjectList.erase(i);
+                std::swap(*i, mChildObjectList.back());
+                mChildObjectList.pop_back();
 
                 // Trigger update of bounding box if necessary
                 if (mParentNode)
@@ -1604,11 +1588,9 @@ namespace Ogre {
     //-----------------------------------------------------------------------
     void Entity::detachAllObjectsImpl(void)
     {
-        ChildObjectList::const_iterator i, iend;
-        iend = mChildObjectList.end();
-        for (i = mChildObjectList.begin(); i != iend; ++i)
+        for (auto child : mChildObjectList)
         {
-            detachObjectImpl(i->second);
+            detachObjectImpl(child);
         }
         mChildObjectList.clear();
     }
@@ -1738,29 +1720,17 @@ namespace Ogre {
         return mMesh->getEdgeList(mMeshLodIndex);
     }
     //-----------------------------------------------------------------------
-    bool Entity::hasEdgeList(void)
-    {
-#if OGRE_NO_MESHLOD
-        unsigned short mMeshLodIndex = 0;
-#endif
-        // check if mesh has an edge list attached
-        // give mesh a chance to built it if scheduled
-        return (mMesh->getEdgeList(mMeshLodIndex) != NULL);
-    }
-    //-----------------------------------------------------------------------
     bool Entity::isHardwareAnimationEnabled(void)
     {
         //find whether the entity has hardware animation for the current active sceme
         unsigned short schemeIndex = MaterialManager::getSingleton()._getActiveSchemeIndex();
-        SchemeHardwareAnimMap::iterator it = mSchemeHardwareAnim.find(schemeIndex);
-        if (it == mSchemeHardwareAnim.end())
+        for(const auto& p : mSchemeHardwareAnim)
         {
-            //evaluate the animation hardware value
-            it = mSchemeHardwareAnim.insert(
-                SchemeHardwareAnimMap::value_type(schemeIndex,
-                    calcVertexProcessing())).first;
+            if(p.first == schemeIndex) return p.second;
         }
-        return it->second;
+        bool ret = calcVertexProcessing();
+        mSchemeHardwareAnim.emplace_back(schemeIndex, ret);
+        return ret;
     }
 
     //-----------------------------------------------------------------------
@@ -1900,8 +1870,8 @@ namespace Ogre {
         return mMeshLodFactorTransformed;
     }
     //-----------------------------------------------------------------------
-    ShadowCaster::ShadowRenderableListIterator
-        Entity::getShadowVolumeRenderableIterator(
+    const ShadowCaster::ShadowRenderableList&
+        Entity::getShadowVolumeRenderableList(
         ShadowTechnique shadowTechnique, const Light* light,
         HardwareIndexBufferSharedPtr* indexBuffer, size_t* indexBufferUsedSize,
         bool extrude, Real extrusionDistance, unsigned long flags)
@@ -1939,7 +1909,7 @@ namespace Ogre {
                             mAnimationState->copyMatchingState(targetState);
                     }
                 }
-                return mLodEntityList[mMeshLodIndex-1]->getShadowVolumeRenderableIterator(
+                return mLodEntityList[mMeshLodIndex-1]->getShadowVolumeRenderableList(
                     shadowTechnique, light, indexBuffer, indexBufferUsedSize,
                     extrude, extrusionDistance, flags);
             }
@@ -1980,7 +1950,7 @@ namespace Ogre {
         {
             // we can't get an edge list for some reason, return blank
             // really we shouldn't be able to get here, but this is a safeguard
-            return ShadowRenderableListIterator(mShadowRenderables.begin(), mShadowRenderables.end());
+            return mShadowRenderables;
         }
 
         // Init shadow renderable list if required
@@ -2078,7 +2048,7 @@ namespace Ogre {
             light, mShadowRenderables, flags);
 
 
-        return ShadowRenderableListIterator(mShadowRenderables.begin(), mShadowRenderables.end());
+        return mShadowRenderables;
     }
     //-----------------------------------------------------------------------
     const VertexData* Entity::findBlendedVertexData(const VertexData* orig)
@@ -2378,7 +2348,8 @@ namespace Ogre {
             mSkeletonInstance->load();
             mAnimationState = OGRE_NEW AnimationStateSet();
             mMesh->_initAnimationState(mAnimationState);
-            mFrameBonesLastUpdated = OGRE_NEW_T(unsigned long, MEMCATEGORY_ANIMATION)(std::numeric_limits<unsigned long>::max());
+            mFrameBonesLastUpdated = OGRE_ALLOC_T(unsigned long, 1, MEMCATEGORY_ANIMATION);
+            *mFrameBonesLastUpdated = std::numeric_limits<unsigned long>::max();
             mNumBoneMatrices = mSkeletonInstance->getNumBones();
             mBoneMatrices = static_cast<Affine3*>(OGRE_MALLOC_SIMD(sizeof(Affine3) * mNumBoneMatrices, MEMCATEGORY_ANIMATION));
 
@@ -2532,11 +2503,4 @@ namespace Ogre {
         return OGRE_NEW Entity(name, pMesh);
 
     }
-    //-----------------------------------------------------------------------
-    void EntityFactory::destroyInstance( MovableObject* obj)
-    {
-        OGRE_DELETE obj;
-    }
-
-
 }

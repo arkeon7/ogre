@@ -42,24 +42,22 @@
 
 #include "OgreInput.h"
 
-/** \addtogroup Optional
-*  @{
-*/
-/** \addtogroup Bites
-*  @{
-*/
 namespace OgreBites
 {
+    /** \addtogroup Optional
+    *  @{
+    */
+    /** \addtogroup Bites
+    *  @{
+    */
 
 #if OGRE_BITES_HAVE_SDL
     class _OgreBitesExport ApplicationContextSDL : public ApplicationContextBase
     {
+    protected:
+        void _destroyWindow(const NativeWindowPair& win);
     public:
-        explicit ApplicationContextSDL(const Ogre::String& appName = OGRE_VERSION_NAME);
-
-        using ApplicationContextBase::setWindowGrab;
-        using ApplicationContextBase::addInputListener;
-        using ApplicationContextBase::removeInputListener;
+        explicit ApplicationContextSDL(const Ogre::String& appName = "Ogre3D");
 
         void setWindowGrab(NativeWindowType* win, bool grab);
         void shutdown();
@@ -69,6 +67,10 @@ namespace OgreBites
         virtual NativeWindowPair
         createWindow(const Ogre::String& name, uint32_t w = 0, uint32_t h = 0,
                      Ogre::NameValuePairList miscParams = Ogre::NameValuePairList());
+
+        using ApplicationContextBase::setWindowGrab;
+        using ApplicationContextBase::addInputListener;
+        using ApplicationContextBase::removeInputListener;
     };
 
     typedef ApplicationContextSDL ApplicationContext;
@@ -76,7 +78,7 @@ namespace OgreBites
     class _OgreBitesExport ApplicationContextAndroid : public ApplicationContextBase
     {
     public:
-        explicit ApplicationContextAndroid(const Ogre::String& appName = OGRE_VERSION_NAME);
+        explicit ApplicationContextAndroid(const Ogre::String& appName = "Ogre3D");
 
         void initAppForAndroid(AAssetManager* assetMgr, ANativeWindow* window);
         void _fireInputEventAndroid(AInputEvent* event, int wheel = 0);
@@ -98,7 +100,7 @@ namespace OgreBites
 #else
     typedef ApplicationContextBase ApplicationContext;
 #endif
+    /** @} */
+    /** @} */
 }
-/** @} */
-/** @} */
 #endif

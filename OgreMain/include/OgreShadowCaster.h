@@ -125,7 +125,7 @@ namespace Ogre {
         /** Returns details of the edges which might be used to determine a silhouette. */
         virtual EdgeData* getEdgeList(void) = 0;
         /** Returns whether the object has a valid edge list. */
-        virtual bool hasEdgeList(void) = 0;
+        bool hasEdgeList() { return getEdgeList() != NULL; }
 
         /** Get the world bounding box of the caster. */
         virtual const AxisAlignedBox& getWorldBoundingBox(bool derive = false) const = 0;
@@ -137,7 +137,7 @@ namespace Ogre {
         typedef std::vector<ShadowRenderable*> ShadowRenderableList;
         typedef VectorIterator<ShadowRenderableList> ShadowRenderableListIterator;
 
-        /** Gets an iterator over the renderables required to render the shadow volume. 
+        /** Gets an list of the renderables required to render the shadow volume.
         @remarks
             Shadowable geometry should ideally be designed such that there is only one
             ShadowRenderable required to render the the shadow; however this is not a necessary
@@ -149,6 +149,10 @@ namespace Ogre {
         @param indexBuffer
             The index buffer to build the renderables into, 
             the current contents are assumed to be disposable.
+        @param indexBufferUsedSize
+            If the rest of buffer is enough than it would be locked with
+            HBL_NO_OVERWRITE semantic and indexBufferUsedSize would be increased,
+            otherwise HBL_DISCARD would be used and indexBufferUsedSize would be reset.
         @param extrudeVertices
             If @c true, this means this class should extrude
             the vertices of the back of the volume in software. If false, it
@@ -158,10 +162,11 @@ namespace Ogre {
         @param flags
             Technique-specific flags, see ShadowRenderableFlags.
         */
-        virtual ShadowRenderableListIterator getShadowVolumeRenderableIterator(
-            ShadowTechnique shadowTechnique, const Light* light, 
-            HardwareIndexBufferSharedPtr* indexBuffer, size_t* indexBufferUsedSize,
-            bool extrudeVertices, Real extrusionDistance, unsigned long flags = 0 ) = 0;
+        virtual const ShadowRenderableList&
+        getShadowVolumeRenderableList(ShadowTechnique shadowTechnique, const Light* light,
+                                      HardwareIndexBufferSharedPtr* indexBuffer,
+                                      size_t* indexBufferUsedSize, bool extrudeVertices,
+                                      Real extrusionDistance, unsigned long flags = 0) = 0;
 
         /** Common implementation of releasing shadow renderables.*/
         static void clearShadowRenderableList(ShadowRenderableList& shadowRenderables);

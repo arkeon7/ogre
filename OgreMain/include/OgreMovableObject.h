@@ -261,6 +261,9 @@ namespace Ogre {
         */
         virtual Real getBoundingRadius(void) const = 0;
 
+        /// as getBoundingRadius, but with scaling applied
+        Real getBoundingRadiusScaled() const;
+
         /** Retrieves the axis-aligned bounding box for this object in world coordinates. */
         virtual const AxisAlignedBox& getWorldBoundingBox(bool derive = false) const;
         /** Retrieves the worldspace bounding sphere for this object. */
@@ -411,7 +414,7 @@ namespace Ogre {
         void removeQueryFlags(uint32 flags) { mQueryFlags &= ~flags; }
         
         /// Returns the query flags relevant for this object
-        uint32 getQueryFlags(void) const { return mQueryFlags; }
+        virtual uint32 getQueryFlags(void) const { return mQueryFlags; }
 
         /** Set the default query flags for all future MovableObject instances.
         */
@@ -439,7 +442,7 @@ namespace Ogre {
         void removeVisibilityFlags(uint32 flags) { mVisibilityFlags &= ~flags; }
         
         /// Returns the visibility flags relevant for this object
-        uint32 getVisibilityFlags(void) const { return mVisibilityFlags; }
+        virtual uint32 getVisibilityFlags(void) const { return mVisibilityFlags; }
 
         /** Set the default visibility flags for all future MovableObject instances.
         */
@@ -503,18 +506,14 @@ namespace Ogre {
 
         /// Returns details of the edges which might be used to determine a silhouette
         EdgeData* getEdgeList(void) { return NULL; }
-        /// Returns whether the object has a valid edge list.
-        bool hasEdgeList(void) { return false; }
         /// Define a default implementation of method from ShadowCaster which implements no shadows
-        ShadowRenderableListIterator getShadowVolumeRenderableIterator(
+        const ShadowRenderableList& getShadowVolumeRenderableList(
             ShadowTechnique shadowTechnique, const Light* light, 
             HardwareIndexBufferSharedPtr* indexBuffer, size_t* indexBufferUsedSize,
             bool extrudeVertices, Real extrusionDist, unsigned long flags = 0);
         
-        /** Overridden member from ShadowCaster. */
-        const AxisAlignedBox& getLightCapBounds(void) const;
-        /** Overridden member from ShadowCaster. */
-        const AxisAlignedBox& getDarkCapBounds(const Light& light, Real dirLightExtrusionDist) const;
+        const AxisAlignedBox& getLightCapBounds(void) const override;
+        const AxisAlignedBox& getDarkCapBounds(const Light& light, Real dirLightExtrusionDist) const override;
         /** Sets whether or not this object will cast shadows.
         @remarks
         This setting simply allows you to turn on/off shadows for a given object.
@@ -588,7 +587,7 @@ namespace Ogre {
     */
     class _OgreExport MovableObjectFactory : public MovableAlloc
     {
-    protected:
+    private:
         /// Type flag, allocated if requested
         uint32 mTypeFlag;
 
@@ -612,7 +611,7 @@ namespace Ogre {
             const String& name, SceneManager* manager, 
             const NameValuePairList* params = 0);
         /** Destroy an instance of the object */
-        virtual void destroyInstance(MovableObject* obj) = 0;
+        virtual void destroyInstance(MovableObject* obj) { delete obj; }
 
         /** Does this factory require the allocation of a 'type flag', used to 
             selectively include / exclude this type from scene queries?

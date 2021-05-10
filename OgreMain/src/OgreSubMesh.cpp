@@ -34,7 +34,6 @@ namespace Ogre {
         , operationType(RenderOperation::OT_TRIANGLE_LIST)
         , vertexData(0)
         , parent(0)
-        , mMatInitialised(false)
         , mBoneAssignmentsOutOfDate(false)
         , mVertexAnimationType(VAT_NONE)
         , mVertexAnimationIncludesNormals(false)
@@ -53,19 +52,12 @@ namespace Ogre {
     //-----------------------------------------------------------------------
     void SubMesh::setMaterialName( const String& name, const String& groupName /* = ResourceGroupManager::AUTODETECT_RESOURCE_GROUP_NAME */)
     {
-        mMaterialName = name;
-        mMatInitialised = true;
+        mMaterial = MaterialManager::getSingleton().getByName(name, groupName);
     }
     //-----------------------------------------------------------------------
     const String& SubMesh::getMaterialName() const
     {
-        return mMaterialName;
-    }
-    //-----------------------------------------------------------------------
-    bool SubMesh::isMatInitialised(void) const
-    {
-        return mMatInitialised;
-
+        return mMaterial ? mMaterial->getName() : BLANKSTRING;
     }
     //-----------------------------------------------------------------------
     void SubMesh::_getRenderOperation(RenderOperation& ro, ushort lodIndex)
@@ -92,8 +84,7 @@ namespace Ogre {
             OGRE_EXCEPT(Exception::ERR_INVALIDPARAMS, "This SubMesh uses shared geometry,  you "
                 "must assign bones to the Mesh, not the SubMesh", "SubMesh.addBoneAssignment");
         }
-        mBoneAssignments.insert(
-            VertexBoneAssignmentList::value_type(vertBoneAssign.vertexIndex, vertBoneAssign));
+        mBoneAssignments.emplace(vertBoneAssign.vertexIndex, vertBoneAssign);
         mBoneAssignmentsOutOfDate = true;
     }
     //-----------------------------------------------------------------------
@@ -135,73 +126,9 @@ namespace Ogre {
         mTextureAliases[aliasName] = textureName;
     }
     //---------------------------------------------------------------------
-    void SubMesh::removeTextureAlias(const String& aliasName)
-    {
-        mTextureAliases.erase(aliasName);
-    }
-    //---------------------------------------------------------------------
     void SubMesh::removeAllTextureAliases(void)
     {
         mTextureAliases.clear();
-    }
-    //---------------------------------------------------------------------
-    bool SubMesh::updateMaterialUsingTextureAliases(void)
-    {
-        bool newMaterialCreated = false;
-        // if submesh has texture aliases
-        // ask the material manager if the current summesh material exists
-        if (hasTextureAliases() &&
-            MaterialManager::getSingleton().resourceExists(
-                mMaterialName, ResourceGroupManager::AUTODETECT_RESOURCE_GROUP_NAME))
-        {
-            // get the current submesh material
-            MaterialPtr material = MaterialManager::getSingleton().getByName( mMaterialName );
-            // get test result for if change will occur when the texture aliases are applied
-            if (material->applyTextureAliases(mTextureAliases, false))
-            {
-                Ogre::String newMaterialName;
-
-                // If this material was already derived from another material
-                // due to aliasing, let's strip off the aliasing suffix and
-                // generate a new one using our current aliasing table.
-
-                Ogre::String::size_type pos = mMaterialName.find("?TexAlias(", 0);
-                if( pos != Ogre::String::npos )
-                    newMaterialName = mMaterialName.substr(0, pos);
-                else
-                    newMaterialName = mMaterialName;
-
-                newMaterialName += "?TexAlias(";
-                // Iterate deterministically over the aliases (always in the same
-                // order via std::map's sorted iteration nature).
-                AliasTextureIterator aliasIter = getAliasTextureIterator();
-                while( aliasIter.hasMoreElements() )
-                {
-                    newMaterialName += aliasIter.peekNextKey();
-                    newMaterialName += "=";
-                    newMaterialName += aliasIter.getNext();
-                    newMaterialName += " ";
-                }
-                newMaterialName += ")";
-                    
-                // Reuse the material if it's already been created. This decreases batch
-                // count and keeps material explosion under control.
-                if(!MaterialManager::getSingleton().resourceExists(newMaterialName, material->getGroup()))
-                {
-                    Ogre::MaterialPtr newMaterial = Ogre::MaterialManager::getSingleton().create(
-                        newMaterialName, material->getGroup());
-                    // copy parent material details to new material
-                    material->copyDetailsTo(newMaterial);
-                    // apply texture aliases to new material
-                    newMaterial->applyTextureAliases(mTextureAliases);
-                }
-                // place new material name in submesh
-                setMaterialName(newMaterialName);
-                newMaterialCreated = true;
-            }
-        }
-
-        return newMaterialCreated;
     }
     //---------------------------------------------------------------------
     void SubMesh::removeLodLevels(void)
@@ -463,8 +390,7 @@ namespace Ogre {
         HardwareBufferManagerBase* bufferManager = parentMesh->getHardwareBufferManager();
         SubMesh* newSub = parentMesh->createSubMesh(newName);
 
-        newSub->mMaterialName = this->mMaterialName;
-        newSub->mMatInitialised = this->mMatInitialised;
+        newSub->mMaterial = this->mMaterial;
         newSub->operationType = this->operationType;
         newSub->useSharedVertices = this->useSharedVertices;
         newSub->extremityPoints = this->extremityPoints;

@@ -34,12 +34,13 @@
 #include "macUtils.h"
 #endif
 
-#include <zlib.h>
+#define MINIZ_HEADER_FILE_ONLY
+#include <miniz.h>
 
 namespace Ogre
 {
     // memory implementations
-    static void* OgreZalloc(void* opaque, unsigned int items, unsigned int size)
+    static void* OgreZalloc(void* opaque, size_t items, size_t size)
     {
         return OGRE_MALLOC(items * size, MEMCATEGORY_GENERAL);
     }
@@ -176,9 +177,7 @@ namespace Ogre
 #endif
             }
 
-            std::fstream *f = OGRE_NEW_T(std::fstream, MEMCATEGORY_GENERAL)();
-            f->open(mTempFileName.c_str(), std::ios::binary | std::ios::out);
-            mTmpWriteStream = DataStreamPtr(OGRE_NEW FileStreamDataStream(f));
+            mTmpWriteStream = _openFileStream(mTempFileName, std::ios::binary | std::ios::out);
             
         }
 

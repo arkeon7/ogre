@@ -1,15 +1,8 @@
 fragment_program SSAO/ShowDepth_fp_hlsl hlsl
 {
-    source ShowDepth.hlsl
-    entry_point ShowDepth_fp
-    target ps_4_0
-}
-
-fragment_program SSAO/ShowDepth_fp_cg cg
-{
     source ShowDepth.cg
     entry_point ShowDepth_fp
-    profiles ps_2_x arbfp1
+    target ps_2_a
 }
 
 fragment_program SSAO/ShowDepth_fp_glsl glsl
@@ -19,7 +12,6 @@ fragment_program SSAO/ShowDepth_fp_glsl glsl
 	default_params
 	{
 		param_named mrt1 int 0
-		param_named tex int 1
 	}
 }
 
@@ -27,7 +19,6 @@ fragment_program SSAO/ShowDepth_fp unified
 {
 	delegate SSAO/ShowDepth_fp_glsl 
 	delegate SSAO/ShowDepth_fp_hlsl 
-	delegate SSAO/ShowDepth_fp_cg
 }
 
 material SSAO/ShowDepth
@@ -45,13 +36,6 @@ material SSAO/ShowDepth
             {
                 content_type compositor SSAO/GBuffer mrt 0
                 tex_address_mode clamp
-                filtering none
-            }
-
-            texture_unit
-            {
-                texture gray256.png
-                tex_address_mode wrap
                 filtering none
             }
         }

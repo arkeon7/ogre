@@ -32,7 +32,8 @@ THE SOFTWARE.
 #include "OgreTerrainPrerequisites.h"
 #include "OgreTerrain.h"
 #include "OgreWorkQueue.h"
-#include "OgreIteratorWrappers.h"
+#include "OgreIteratorWrapper.h"
+#include "OgreConfigFile.h"
 
 namespace Ogre
 {
@@ -83,7 +84,7 @@ namespace Ogre
         /** Alternate constructor.
         @remarks
             You can ONLY use this constructor if you subsequently call loadGroupDefinition
-            to populate the rest.
+            or loadLegacyTerrain to populate the rest.
         */
         TerrainGroup(SceneManager* sm);
         virtual ~TerrainGroup();
@@ -245,18 +246,30 @@ namespace Ogre
 
         /** Load any terrain instances that have been defined but not loaded yet. 
         @param synchronous Whether we should force this to happen entirely in the
-            primary thread (default false, operations are threaded if possible)
+            primary thread
         */
         virtual void loadAllTerrains(bool synchronous = false);
         
         /** Load a specific terrain slot based on the definition that has already 
             been supplied.
         @param x, y The coordinates of the terrain slot relative to the centre slot (signed).
-        @param synchronous Whether we should force this to happen entirely in the
-            primary thread (default false, operations are threaded if possible)
+        @copydetails loadAllTerrains
         */
         virtual void loadTerrain(long x, long y, bool synchronous = false);
         
+        /** Load a terrain.cfg as used by the terrain scene manager into a single terrain slot
+         *
+         * automatically configures the SM2Profile if it is used.
+         * @attention not all of the legacy parameters/ parameter combinations are supported
+         * @param cfgFilename .cfg file that specifices what textures/scale/mipmaps/etc to use.
+         * @param x, y The coordinates of the terrain slot relative to the centre slot (signed).
+         * @copydetails loadAllTerrains
+         */
+        void loadLegacyTerrain(const String& cfgFilename, long x = 0, long y = 0, bool synchronous = true);
+
+        /// @overload
+        void loadLegacyTerrain(const ConfigFile& cfg, long x = 0, long y = 0, bool synchronous = true);
+
         /** Unload a specific terrain slot.
         @remarks
             This destroys the Terrain instance but retains the slot definition (so
@@ -461,10 +474,13 @@ namespace Ogre
         typedef MapIterator<TerrainSlotMap> TerrainIterator;
         typedef ConstMapIterator<TerrainSlotMap> ConstTerrainIterator;
 
-        /// Get an iterator over the defined terrains.
-        TerrainIterator getTerrainIterator();
-        /// Get an iterator over the defined terrains (const)
-        ConstTerrainIterator getTerrainIterator() const;
+        /// @deprecated use getTerrainSlots()
+        OGRE_DEPRECATED TerrainIterator getTerrainIterator();
+        /// @deprecated use getTerrainSlots()
+        OGRE_DEPRECATED ConstTerrainIterator getTerrainIterator() const;
+
+        /// Get the defined terrains
+        const TerrainSlotMap& getTerrainSlots() const { return mTerrainSlots; }
 
         /// WorkQueue::RequestHandler override
         bool canHandleRequest(const WorkQueue::Request* req, const WorkQueue* srcQ);
@@ -521,7 +537,7 @@ namespace Ogre
          */
         size_t getNumTerrainPrepareRequests() const;
 
-    protected:
+    private:
         typedef std::map<TerrainSlot*, WorkQueue::RequestID> TerrainPrepareRequestMap;
         SceneManager *mSceneManager;
         Terrain::Alignment mAlignment;
@@ -553,8 +569,6 @@ namespace Ogre
         {
             TerrainSlot* slot;
             TerrainGroup* origin;
-            _OgreTerrainExport friend std::ostream& operator<<(std::ostream& o, const LoadRequest& r)
-            { return o; }       
         };
         
 
