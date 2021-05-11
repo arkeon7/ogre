@@ -117,8 +117,8 @@ namespace Ogre {
                 // multiplied out version of $A = pi * r^2$
                 // where r is projected using a gluPerspective matrix as $pr = cot(fovy / 2) * r / z$
                 // and then converted to pixels as $pr * height / 2$
-                return 0.25 * (boundingArea * projectionMatrix[0][0] * projectionMatrix[1][1]) /
-                       distanceSquared;
+                return (0.25 * (boundingArea * projectionMatrix[0][0] * projectionMatrix[1][1]) /
+                       distanceSquared) * camera->getLodBias();
             }
         case PT_ORTHOGRAPHIC:
             {
@@ -130,7 +130,7 @@ namespace Ogre {
                     return getBaseValue();
 
                 // Estimate covered area
-                return boundingArea / orthoArea;
+                return (boundingArea / orthoArea) * camera->getLodBias();
             }
         default:
             {
